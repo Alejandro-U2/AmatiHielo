@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
 import GestionUsuarios from './modules/GestionUsuarios'
+import Inventarios from './modules/Inventarios'
 import ModuloEnProceso from './modules/ModuloEnProceso'
 import { getCurrentUser, logout } from '../services/authService'
 
@@ -32,6 +33,7 @@ function Dashboard() {
 
   const activeViews = {
     seguridad: <GestionUsuarios currentUserId={currentUser?.id} />,
+    inventarios: <Inventarios />,
   }
 
   const handleLogout = () => {
@@ -60,7 +62,7 @@ function Dashboard() {
       name: 'Inventarios',
       icon: Package,
       description: 'Control de stock y almacen',
-      estado: 'en_proceso',
+      estado: 'activo',
       features: ['Control de Stock', 'Alertas de Reabastecimiento', 'Gestion de Mermas'],
     },
     {
