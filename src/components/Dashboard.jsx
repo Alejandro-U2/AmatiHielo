@@ -16,10 +16,9 @@ import {
   Wallet,
 } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
+import GestionUsuarios from './modules/GestionUsuarios'
 import ModuloEnProceso from './modules/ModuloEnProceso'
 import { getCurrentUser, logout } from '../services/authService'
-
-const ACTIVE_VIEWS = {}
 
 function Dashboard() {
   const navigate = useNavigate()
@@ -30,6 +29,10 @@ function Dashboard() {
     currentUser?.nombre || currentUser?.username || currentUser?.email || 'Usuario',
   )
   const [activeModule, setActiveModule] = useState('inicio')
+
+  const activeViews = {
+    seguridad: <GestionUsuarios currentUserId={currentUser?.id} />,
+  }
 
   const handleLogout = () => {
     logout()
@@ -49,7 +52,7 @@ function Dashboard() {
       name: 'Seguridad y Acceso',
       icon: LockKeyhole,
       description: 'Gestion de usuarios y permisos',
-      estado: 'en_proceso',
+      estado: 'activo',
       features: ['Gestion de Usuarios', 'Bitacora de Eventos', 'Niveles de Acceso'],
     },
     {
@@ -286,7 +289,7 @@ function Dashboard() {
           )}
 
           {activeModule !== 'inicio' && (
-            ACTIVE_VIEWS[activeModule] || <ModuloEnProceso module={activeModuleInfo} />
+            activeViews[activeModule] || <ModuloEnProceso module={activeModuleInfo} />
           )}
         </div>
       </main>

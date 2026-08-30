@@ -1,0 +1,755 @@
+import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import {
+  createCompleteUser,
+  deleteUserProfile,
+  listDepartamentos,
+  listEstadosUsuario,
+  listMunicipios,
+  listRoles,
+  listUsers,
+  updateUserProfile,
+} from '../../services/usersService'
+
+const NAME_REGEX = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/
+const MIN_PASSWORD_LENGTH = 6
+
+const fallbackRoles = [
+  { id: null, nombre: 'Superusuario' },
+  { id: null, nombre: 'Administrador' },
+  { id: null, nombre: 'Operario' },
+]
+
+const fallbackEstados = [
+  { id: null, nombre: 'Activo' },
+  { id: null, nombre: 'Inactivo' },
+]
+
+const initialFormData = {
+  primerNombre: '',
+  segundoNombre: '',
+  primerApellido: '',
+  segundoApellido: '',
+  usuario: '',
+  email: '',
+  password: '',
+  rol: 'Operario',
+  estado: 'Activo',
+  departamentoId: '',
+  municipioId: '',
+}
+
+function splitNombre(nombre = '') {
+  const words = nombre.trim().split(/\s+/).filter(Boolean)
+
+  return {
+    primerNombre: words[0] || '',
+    segundoNombre: words.length >= 3 ? words[1] : '',
+    primerApellido: words.length >= 2 ? (words.length >= 3 ? words[words.length - 1] : words[1]) : '',
+    segundoApellido: words.length === 4 ? words[3] : '',
+  }
+}
+
+function GestionUsuarios({ currentUserId }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [modalType, setModalType] = useState('') // 'add', 'edit', 'delete'
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [filterRole, setFilterRole] = useState('todos')
+  const [usuarios, setUsuarios] = useState([])
+  const [roles, setRoles] = useState(fallbackRoles)
+  const [estados, setEstados] = useState(fallbackEstados)
+  const [departamentos, setDepartamentos] = useState([])
+  const [municipios, setMunicipios] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [formData, setFormData] = useState(initialFormData)
+  const [isSaving, setIsSaving] = useState(false)
+  const [modalError, setModalError] = useState('')
+
+  const fetchUsers = async () => {
+    setIsLoading(true)
+    setLoadError('')
+
+    try {
+      const data = await listUsers()
+      setUsuarios(data)
+    } catch (error) {
+      setLoadError(error.message || 'No fue posible cargar los usuarios.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const fetchRoles = async () => {
+    try {
+      const data = await listRoles()
+      setRoles(data?.length ? data : fallbackRoles)
+    } catch {
+      setRoles(fallbackRoles)
+    }
+  }
+
+  const fetchEstados = async () => {
+    try {
+      const data = await listEstadosUsuario()
+      setEstados(data?.length ? data : fallbackEstados)
+    } catch {
+      setEstados(fallbackEstados)
+    }
+  }
+
+  const fetchDepartamentos = async () => {
+    try {
+      const data = await listDepartamentos()
+      setDepartamentos(data || [])
+    } catch {
+      setDepartamentos([])
+    }
+  }
+
+  const fetchMunicipios = async (departamentoId) => {
+    if (!departamentoId) {
+      setMunicipios([])
+      return
+    }
+
+    try {
+      const data = await listMunicipios(departamentoId)
+      setMunicipios(data || [])
+    } catch {
+      setMunicipios([])
+    }
+  }
+
+  useEffect(() => {
+    fetchUsers()
+    fetchRoles()
+    fetchEstados()
+    fetchDepartamentos()
+  }, [])
+
+  const filteredUsers = useMemo(() => {
+    const normalizedTerm = searchTerm.trim().toLowerCase()
+
+    return usuarios.filter((user) => {
+      const matchesRole = filterRole === 'todos' || user.rol === filterRole
+      const matchesSearch =
+        normalizedTerm.length === 0 ||
+        user.nombre.toLowerCase().includes(normalizedTerm) ||
+        user.usuario.toLowerCase().includes(normalizedTerm) ||
+        user.email.toLowerCase().includes(normalizedTerm)
+
+      return matchesRole && matchesSearch
+    })
+  }, [usuarios, filterRole, searchTerm])
+
+  const handleOpenModal = (type, user = null) => {
+    setModalType(type)
+    setSelectedUser(user)
+    setModalError('')
+
+    if (type === 'edit' && user) {
+      setFormData({
+        ...(user.primerNombre || user.primerApellido
+          ? {
+              primerNombre: user.primerNombre || '',
+              segundoNombre: user.segundoNombre || '',
+              primerApellido: user.primerApellido || '',
+              segundoApellido: user.segundoApellido || '',
+            }
+          : splitNombre(user.nombre)),
+        usuario: user.usuario,
+        email: user.email,
+        password: '',
+        rol: user.rol,
+        estado: user.estado,
+        departamentoId: user.departamentoId || '',
+        municipioId: user.municipioId || '',
+      })
+
+      if (user.departamentoId) {
+        fetchMunicipios(user.departamentoId)
+      }
+    } else {
+      setFormData(initialFormData)
+    }
+
+    setShowModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowModal(false)
+    setSelectedUser(null)
+    setModalType('')
+    setIsSaving(false)
+    setModalError('')
+    setFormData(initialFormData)
+  }
+
+  const handleFormField = (field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+
+    if (field === 'departamentoId') {
+      setFormData((prev) => ({
+        ...prev,
+        departamentoId: value,
+        municipioId: '',
+      }))
+      setMunicipios([])
+      fetchMunicipios(value)
+    }
+  }
+
+  const handleSubmitUser = async (event) => {
+    event.preventDefault()
+
+    const nameFields = ['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido']
+    const hasAnyName = nameFields.some((field) => formData[field].trim().length > 0)
+    const invalidNameField = nameFields.find((field) => {
+      const value = formData[field].trim()
+      return value.length > 0 && !NAME_REGEX.test(value)
+    })
+
+    if (!hasAnyName || !formData.primerNombre.trim() || !formData.primerApellido.trim()) {
+      setModalError('Primer nombre y primer apellido son obligatorios.')
+      return
+    }
+
+    if (invalidNameField) {
+      setModalError('Los nombres y apellidos solo pueden contener letras, espacios y acentos.')
+      return
+    }
+
+    if (!formData.usuario.trim() || !formData.email.trim()) {
+      setModalError('Usuario y email son obligatorios.')
+      return
+    }
+
+    if (!formData.departamentoId) {
+      setModalError('El departamento es obligatorio.')
+      return
+    }
+
+    if (!formData.municipioId) {
+      setModalError('El municipio es obligatorio.')
+      return
+    }
+
+    if (modalType === 'add' && formData.password.length < MIN_PASSWORD_LENGTH) {
+      setModalError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`)
+      return
+    }
+
+    if (modalType === 'edit' && selectedUser?.id === currentUserId && formData.estado === 'Inactivo') {
+      setModalError('No puedes desactivar tu propio usuario.')
+      return
+    }
+
+    setModalError('')
+    setIsSaving(true)
+
+    const namePayload = {
+      primerNombre: formData.primerNombre,
+      segundoNombre: formData.segundoNombre,
+      primerApellido: formData.primerApellido,
+      segundoApellido: formData.segundoApellido,
+    }
+
+    try {
+      if (modalType === 'add') {
+        await createCompleteUser({
+          ...namePayload,
+          usuario: formData.usuario,
+          email: formData.email,
+          password: formData.password,
+          rol: formData.rol,
+          estado: formData.estado,
+          departamentoId: formData.departamentoId,
+          municipioId: formData.municipioId,
+        })
+      }
+
+      if (modalType === 'edit' && selectedUser?.id) {
+        await updateUserProfile(selectedUser.id, {
+          ...namePayload,
+          usuario: formData.usuario,
+          email: formData.email,
+          password: formData.password,
+          rol: formData.rol,
+          estado: formData.estado,
+          departamentoId: formData.departamentoId,
+          municipioId: formData.municipioId,
+        })
+      }
+
+      await fetchUsers()
+      toast.success(modalType === 'add' ? 'Usuario creado correctamente.' : 'Usuario actualizado correctamente.')
+      handleCloseModal()
+    } catch (error) {
+      setModalError(error.message || 'No fue posible guardar el usuario.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser?.id) {
+      return
+    }
+
+    if (selectedUser.id === currentUserId) {
+      setModalError('No puedes eliminar tu propio usuario.')
+      return
+    }
+
+    setModalError('')
+    setIsSaving(true)
+
+    try {
+      await deleteUserProfile(selectedUser.id)
+      await fetchUsers()
+      toast.success('Usuario eliminado correctamente.')
+      handleCloseModal()
+    } catch (error) {
+      setModalError(error.message || 'No fue posible eliminar el usuario.')
+      setIsSaving(false)
+    }
+  }
+
+  const isEditingSelf = modalType === 'edit' && selectedUser?.id === currentUserId
+  const nameFieldsConfig = [
+    { key: 'primerNombre', label: 'Primer nombre', placeholder: 'Ej: Juan', required: true },
+    { key: 'segundoNombre', label: 'Segundo nombre', placeholder: 'Ej: Antonio', required: false },
+    { key: 'primerApellido', label: 'Primer apellido', placeholder: 'Ej: Pérez', required: true },
+    { key: 'segundoApellido', label: 'Segundo apellido', placeholder: 'Ej: López', required: false },
+  ]
+  const invalidNameField = nameFieldsConfig.find((field) => {
+    const value = formData[field.key].trim()
+    return value.length > 0 && !NAME_REGEX.test(value)
+  })?.key
+
+  return (
+    <div>
+      {/* Header con acciones */}
+      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-1">Gestión de Usuarios</h3>
+            <p className="text-sm text-gray-600">Administra los usuarios y sus permisos en el sistema</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleOpenModal('add')}
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium flex items-center justify-center space-x-2"
+            >
+              <span className="text-xl">➕</span>
+              <span>Nuevo Usuario</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchUsers}
+              className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 transition-all duration-200 shadow-md font-medium flex items-center justify-center space-x-2"
+            >
+              <span className="text-xl">🔄</span>
+              <span>Recargar</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros y búsqueda */}
+      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Búsqueda */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Buscar usuario</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Buscar por nombre, usuario o email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 pl-10 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+              />
+              <span className="absolute left-3 top-3 text-gray-400">🔍</span>
+            </div>
+          </div>
+
+          {/* Filtro por rol */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Filtrar por rol</label>
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+            >
+              <option value="todos">Todos los roles</option>
+              {roles.map((role) => (
+                <option key={role.id || role.nombre} value={role.nombre}>{role.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Estadísticas rápidas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md p-5 text-white">
+          <p className="text-sm opacity-90 mb-1">Total Usuarios</p>
+          <p className="text-3xl font-bold">{usuarios.length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-md p-5 text-white">
+          <p className="text-sm opacity-90 mb-1">Usuarios Activos</p>
+          <p className="text-3xl font-bold">{usuarios.filter(u => u.estado === 'Activo').length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-md p-5 text-white">
+          <p className="text-sm opacity-90 mb-1">Administradores</p>
+          <p className="text-3xl font-bold">{usuarios.filter(u => u.rol === 'Administrador' || u.rol === 'Superusuario').length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-md p-5 text-white">
+          <p className="text-sm opacity-90 mb-1">Operarios</p>
+          <p className="text-3xl font-bold">{usuarios.filter(u => u.rol === 'Operario').length}</p>
+        </div>
+      </div>
+
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-red-700 text-sm">
+          {loadError}
+        </div>
+      )}
+
+      {/* Tabla de usuarios */}
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Usuario</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Rol</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Último Acceso</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {isLoading && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                    Cargando usuarios...
+                  </td>
+                </tr>
+              )}
+
+              {!isLoading && filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                    No hay usuarios para mostrar con los filtros actuales.
+                  </td>
+                </tr>
+              )}
+
+              {!isLoading && filteredUsers.map((usuario) => (
+                <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-white font-bold mr-3">
+                        {usuario.nombre.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-800">{usuario.nombre}</p>
+                        <p className="text-sm text-gray-500">@{usuario.usuario}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                      usuario.rol === 'Superusuario'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : usuario.rol === 'Administrador'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {usuario.rol}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{usuario.email}</td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                      usuario.estado === 'Activo' 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {usuario.estado}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{usuario.ultimoAcceso}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-center space-x-2">
+                      <button
+                        onClick={() => handleOpenModal('edit', usuario)}
+                        className="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleOpenModal('delete', usuario)}
+                        disabled={usuario.id === currentUserId}
+                        title={usuario.id === currentUserId ? 'No puedes eliminar tu propio usuario' : 'Eliminar'}
+                        className="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal para agregar/editar/eliminar usuario */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header del modal */}
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">
+                  {modalType === 'add' && '➕ Nuevo Usuario'}
+                  {modalType === 'edit' && '✏️ Editar Usuario'}
+                  {modalType === 'delete' && '🗑️ Eliminar Usuario'}
+                </h3>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Contenido del modal */}
+              {(modalType === 'add' || modalType === 'edit') && (
+                <form className="space-y-4" onSubmit={handleSubmitUser}>
+                  {modalError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                      {modalError}
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="block text-sm font-semibold text-gray-700 mb-2">Nombre completo</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {nameFieldsConfig.map((field) => (
+                        <div key={field.key}>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            {field.label} {field.required && <span className="text-red-500">*</span>}
+                          </label>
+                          <input
+                            type="text"
+                            value={formData[field.key]}
+                            onChange={(e) => handleFormField(field.key, e.target.value)}
+                            placeholder={field.placeholder}
+                            aria-invalid={invalidNameField === field.key}
+                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {invalidNameField && (
+                      <p className="mt-1 text-sm text-red-600">
+                        Los nombres y apellidos solo pueden contener letras, espacios y acentos.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre de usuario</label>
+                    <input
+                      type="text"
+                      value={formData.usuario}
+                      onChange={(e) => handleFormField('usuario', e.target.value)}
+                      placeholder="Ej: jperez"
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleFormField('email', e.target.value)}
+                      placeholder="usuario@amati.com"
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      {modalType === 'add' ? 'Contraseña' : 'Contraseña nueva (opcional)'}
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => handleFormField('password', e.target.value)}
+                      placeholder={modalType === 'add' ? 'Mínimo 6 caracteres' : 'Deja vacío para no cambiar'}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Rol</label>
+                    <select
+                      value={formData.rol}
+                      onChange={(e) => handleFormField('rol', e.target.value)}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    >
+                      {roles.map((role) => (
+                        <option key={role.id || role.nombre} value={role.nombre}>
+                          {role.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Estado</label>
+                    <select
+                      value={formData.estado}
+                      onChange={(e) => handleFormField('estado', e.target.value)}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    >
+                      {estados.map((estado) => (
+                        <option
+                          key={estado.id || estado.nombre}
+                          value={estado.nombre}
+                          disabled={isEditingSelf && estado.nombre === 'Inactivo'}
+                        >
+                          {estado.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    {isEditingSelf && (
+                      <p className="mt-1 text-sm text-amber-600">No puedes desactivar tu propio usuario.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      País <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value="Guatemala"
+                      disabled
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed focus:outline-none"
+                    >
+                      <option value="Guatemala">Guatemala</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Departamento <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.departamentoId}
+                      onChange={(e) => handleFormField('departamentoId', e.target.value)}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    >
+                      <option value="">Selecciona un departamento</option>
+                      {departamentos.map((departamento) => (
+                        <option key={departamento.id} value={departamento.id}>
+                          {departamento.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Municipio <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.municipioId}
+                      onChange={(e) => handleFormField('municipioId', e.target.value)}
+                      disabled={!formData.departamentoId}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    >
+                      <option value="">{formData.departamentoId ? 'Selecciona un municipio' : 'Primero selecciona el departamento'}</option>
+                      {municipios.map((municipio) => (
+                        <option key={municipio.id} value={municipio.id}>
+                          {municipio.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex space-x-3 pt-4">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleCloseModal}
+                      className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
+                    >
+                      {isSaving ? 'Guardando...' : modalType === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {modalType === 'delete' && (
+                <div>
+                  {modalError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
+                      {modalError}
+                    </div>
+                  )}
+                  <div className="bg-red-50 rounded-lg p-4 mb-6">
+                    <p className="text-gray-700 mb-2">¿Estás seguro de que deseas eliminar al usuario?</p>
+                    <p className="font-bold text-gray-800">{selectedUser?.nombre}</p>
+                    <p className="text-sm text-gray-600">@{selectedUser?.usuario}</p>
+                  </div>
+                  <p className="text-sm text-red-600 mb-6">⚠️ Esta acción no se puede deshacer.</p>
+                  <div className="flex space-x-3">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleCloseModal}
+                      className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleDeleteUser}
+                      className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white py-3 rounded-lg hover:from-red-600 hover:to-red-700 transition-all shadow-md font-medium"
+                    >
+                      {isSaving ? 'Eliminando...' : 'Eliminar Usuario'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default GestionUsuarios

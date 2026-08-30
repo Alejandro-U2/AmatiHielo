@@ -2,6 +2,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
 import authRoutes from './routes/authRoutes.js'
+import usersRoutes from './routes/usersRoutes.js'
 
 dotenv.config()
 
@@ -25,6 +26,7 @@ app.get('/health', (req, res) => {
 })
 
 app.use('/auth', authRoutes)
+app.use('/api/users', usersRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Ruta no encontrada.' })
