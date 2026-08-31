@@ -18,6 +18,7 @@ en el menu con la etiqueta "En Proceso" y se activaran en versiones posteriores.
 │   ├── components/
 │   │   ├── modules/      # Paginas de cada modulo
 │   │   ├── Login.jsx     # Pantalla de autenticacion
+│   │   ├── RecuperarContrasena.jsx  # Recuperacion / restablecimiento de contrasena
 │   │   └── Dashboard.jsx # Shell principal (sidebar + contenido)
 │   ├── services/         # Consumo de la API
 │   └── assets/           # Recursos estaticos
@@ -73,8 +74,8 @@ Modo de autenticacion (`VITE_AUTH_MODE`):
 ## Base de datos (Supabase)
 
 Aplica las migraciones de `supabase/migrations/` en orden numerico desde el SQL Editor de
-Supabase. La historia completa (001-029, 031-033) deja la base funcional para los tres
-modulos activos y para los catalogos de los modulos futuros.
+Supabase. La historia completa (001-029 y 031-034) deja la base funcional para el login
+y los modulos de usuarios e inventarios, y para los catalogos de los modulos futuros.
 
 Ejemplo para el login real: crea un usuario en Auth de Supabase y un perfil asociado con
 rol `Administrador` o `Superusuario` y estado `Activo` para poder operar modulos de gestion.
