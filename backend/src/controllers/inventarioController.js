@@ -221,10 +221,7 @@ export async function createMovimiento(req, res) {
       p_cantidad: payload.cantidad,
       p_motivo: payload.motivo,
       p_usuario: usuario,
-    }
-
-    if (payload.unidad_compra_id !== null) {
-      rpcArgs.p_unidad_compra_id = payload.unidad_compra_id
+      p_unidad_compra_id: payload.unidad_compra_id,
     }
 
     const { data, error } = await supabaseAdmin.rpc('registrar_movimiento_inventario', rpcArgs)

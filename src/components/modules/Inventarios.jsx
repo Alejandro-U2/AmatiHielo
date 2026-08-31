@@ -32,6 +32,7 @@ function Inventarios() {
   const [isSavingMovimiento, setIsSavingMovimiento] = useState(false)
   const [errorProducto, setErrorProducto] = useState('')
   const [errorCarga, setErrorCarga] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
   const [movimientoForm, setMovimientoForm] = useState({
     productoId: '',
     cantidad: '',
@@ -106,6 +107,21 @@ function Inventarios() {
     return Number(form.precioCompra || 0)
   }
 
+  const generarCodigoLibre = (categoria, prefix) => {
+    const usados = new Set(
+      productos
+        .filter((p) => p.categoria === categoria)
+        .map((p) => String(p.codigo || '').trim())
+    )
+    let numero = 1
+    let codigo = ''
+    do {
+      codigo = `${prefix}-${numero.toString().padStart(3, '0')}`
+      numero += 1
+    } while (usados.has(codigo))
+    return codigo
+  }
+
   const loadProductos = async () => {
     const productosData = await listProductosInventario()
     setProductos(productosData)
@@ -152,6 +168,7 @@ function Inventarios() {
     const cargarInventario = async () => {
       try {
         setErrorCarga('')
+        setIsLoading(true)
         const [productosData, movimientosData] = await Promise.all([
           listProductosInventario(),
           listMovimientosInventario(),
@@ -169,6 +186,10 @@ function Inventarios() {
           setMovimientos([])
           setErrorCarga(error.message || 'No fue posible cargar inventario.')
         }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
@@ -181,10 +202,7 @@ function Inventarios() {
     }
   }, [])
 
-  const alertas = productos.filter(p => {
-    const margenSeguridad = p.minimo * 1.2 // 20% arriba del mínimo
-    return p.stock < margenSeguridad
-  })
+  const alertas = productos.filter(p => p.minimo > 0 && p.stock < p.minimo)
   const selectedMovimientoProducto = productos.find(
     (producto) => String(producto.id) === String(movimientoForm.productoId),
   )
@@ -217,6 +235,7 @@ function Inventarios() {
   }
 
   const getEstadoTexto = (stock, minimo) => {
+    if (minimo <= 0) return { texto: 'Normal', estado: 'normal' }
     const porcentaje = (stock / minimo) * 100
     if (porcentaje < 50) return { texto: 'Crítico', estado: 'critico' }
     if (porcentaje < 100) return { texto: 'Bajo', estado: 'bajo' }
@@ -261,8 +280,7 @@ function Inventarios() {
     // Auto-generar código cuando cambia la categoría
     if (field === 'categoria' && value) {
       const prefix = categoriasInventario.find((categoria) => categoria.nombre === value)?.codigo || 'GEN'
-      const count = productos.filter(p => p.categoria === value).length + 1
-      updated.codigo = `${prefix}-${count.toString().padStart(3, '0')}`
+      updated.codigo = generarCodigoLibre(value, prefix)
     }
 
     setProductoForm(updated)
@@ -278,8 +296,7 @@ function Inventarios() {
       let codigo = productoForm.codigo
       if (!codigo && productoForm.categoria) {
         const prefix = categoriasInventario.find((categoria) => categoria.nombre === productoForm.categoria)?.codigo || 'GEN'
-        const count = productos.filter(p => p.categoria === productoForm.categoria).length + 1
-        codigo = `${prefix}-${count.toString().padStart(3, '0')}`
+        codigo = generarCodigoLibre(productoForm.categoria, prefix)
       }
 
       const payload = {
@@ -327,10 +344,23 @@ function Inventarios() {
         throw new Error('Tipo de movimiento no válido.')
       }
 
+      const cantidad = Number(movimientoForm.cantidad || 0)
+
+      if (Number.isNaN(cantidad) || cantidad <= 0) {
+        throw new Error('La cantidad debe ser mayor a 0.')
+      }
+
+      if ((modalType === 'salida' || modalType === 'merma') && selectedMovimientoProducto) {
+        const stockActual = Number(selectedMovimientoProducto.stock || 0)
+        if (cantidad > stockActual) {
+          throw new Error(`Stock insuficiente. Disponible: ${stockActual}.`)
+        }
+      }
+
       const payload = {
         productoId: Number(movimientoForm.productoId || 0),
         tipo,
-        cantidad: Number(movimientoForm.cantidad || 0),
+        cantidad,
         motivo: movimientoForm.motivo,
       }
 
@@ -550,7 +580,14 @@ function Inventarios() {
                       </tr>
                     )
                   })}
-                  {filteredProductos.length === 0 && (
+                  {isLoading && (
+                    <tr>
+                      <td colSpan="8" className="px-6 py-10 text-center text-sm text-gray-500">
+                        Cargando artículos...
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoading && filteredProductos.length === 0 && (
                     <tr>
                       <td colSpan="8" className="px-6 py-10 text-center text-sm text-gray-500">
                         No hay artículos registrados.
@@ -856,6 +893,11 @@ function Inventarios() {
 
               {(modalType === 'entrada' || modalType === 'salida' || modalType === 'merma') && (
                 <form className="space-y-4" onSubmit={handleSubmitMovimiento}>
+                  {errorProducto && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {errorProducto}
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Producto</label>
                     <select
@@ -883,6 +925,11 @@ function Inventarios() {
                         step="0.01"
                         required
                       />
+                      {(modalType === 'salida' || modalType === 'merma') && selectedMovimientoProducto && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Stock disponible: <span className="font-semibold text-gray-700">{selectedMovimientoProducto.stock}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div>
