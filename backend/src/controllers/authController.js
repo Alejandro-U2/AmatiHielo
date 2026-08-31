@@ -1,6 +1,9 @@
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 import { supabasePublic } from '../config/supabasePublic.js'
 
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+const MIN_PASSWORD_LENGTH = 6
+
 function normalizeIdentifier(value = '') {
   return value.trim()
 }
@@ -79,5 +82,94 @@ export async function login(req, res) {
     })
   } catch (error) {
     return res.status(500).json({ message: error?.message || 'No fue posible iniciar sesion.' })
+  }
+}
+
+export async function forgotPassword(req, res) {
+  const { usernameOrEmail } = req.body || {}
+
+  if (!usernameOrEmail) {
+    return res.status(400).json({ message: 'usernameOrEmail es obligatorio.' })
+  }
+
+  try {
+    const email = await resolveEmail(usernameOrEmail)
+
+    const genericMessage = 'Si el correo existe, se envió un enlace para restablecer la contraseña.'
+
+    if (!email) {
+      return res.json({ message: genericMessage })
+    }
+
+    const redirectTo = `${frontendUrl}/recuperar`
+    const { error } = await supabasePublic.auth.resetPasswordForEmail(email, { redirectTo })
+
+    if (error) {
+      return res.status(400).json({ message: error.message })
+    }
+
+    return res.json({ message: genericMessage })
+  } catch (error) {
+    return res.status(500).json({ message: error?.message || 'No fue posible enviar el enlace.' })
+  }
+}
+
+export async function resetPassword(req, res) {
+  const { code, email, tokenHash, type, accessToken, password } = req.body || {}
+
+  if (!tokenHash && !(code && email) && !accessToken) {
+    return res.status(400).json({ message: 'El enlace no es válido o ya fue usado.' })
+  }
+
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({
+      message: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`,
+    })
+  }
+
+  try {
+    let userId = null
+
+    if (tokenHash) {
+      const { data, error } = await supabasePublic.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type || 'recovery',
+      })
+
+      if (error || !data?.user?.id) {
+        return res.status(400).json({ message: error?.message || 'El enlace no es válido o ya fue usado.' })
+      }
+      userId = data.user.id
+    } else if (accessToken) {
+      const { data, error } = await supabaseAdmin.auth.getUser(accessToken)
+
+      if (error || !data?.user?.id) {
+        return res.status(400).json({ message: error?.message || 'El enlace no es válido o ya fue usado.' })
+      }
+      userId = data.user.id
+    } else {
+      const { data, error } = await supabasePublic.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'recovery',
+      })
+
+      if (error || !data?.user?.id) {
+        return res.status(400).json({ message: error?.message || 'El enlace no es válido o ya fue usado.' })
+      }
+      userId = data.user.id
+    }
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password,
+    })
+
+    if (updateError) {
+      return res.status(400).json({ message: updateError.message })
+    }
+
+    return res.json({ message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' })
+  } catch (error) {
+    return res.status(500).json({ message: error?.message || 'No fue posible restablecer la contraseña.' })
   }
 }

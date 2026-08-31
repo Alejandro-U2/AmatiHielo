@@ -99,6 +99,74 @@ export async function login({ username, password, rememberMe }) {
   return { token, user }
 }
 
+export async function forgotPassword({ usernameOrEmail }) {
+  const trimmed = (usernameOrEmail || '').trim()
+
+  if (!trimmed) {
+    throw new Error('Debes ingresar tu usuario o correo.')
+  }
+
+  if (AUTH_MODE === 'mock') {
+    throw new Error('El modo mock no envía correos. Usa la configuración de Supabase.')
+  }
+
+  if (!API_URL) {
+    throw new Error('Falta configurar VITE_API_URL para recuperar contraseña.')
+  }
+
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ usernameOrEmail: trimmed }),
+  })
+
+  let payload = null
+  try {
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.message || 'No fue posible enviar el enlace de recuperación.')
+  }
+
+  return payload
+}
+
+export async function resetPassword({ code, email, tokenHash, type, accessToken, password }) {
+  if (AUTH_MODE === 'mock') {
+    throw new Error('El modo mock no permite restablecer contraseñas.')
+  }
+
+  if (!API_URL) {
+    throw new Error('Falta configurar VITE_API_URL para restablecer contraseña.')
+  }
+
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code, email, tokenHash, type, accessToken, password }),
+  })
+
+  let payload = null
+  try {
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.message || 'No fue posible restablecer la contraseña.')
+  }
+
+  return payload
+}
+
 export function logout() {
   clearLegacySession()
 }

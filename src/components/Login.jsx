@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import logoAmati from '../assets/logo-amati.jpg'
-import { isAuthenticated, login } from '../services/authService'
+import { forgotPassword, isAuthenticated, login } from '../services/authService'
 
 function Login() {
   const navigate = useNavigate()
@@ -11,12 +11,40 @@ function Login() {
   const [rememberMe, setRememberMe] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [forgotStatus, setForgotStatus] = useState({ type: '', message: '' })
 
   useEffect(() => {
     if (isAuthenticated()) {
       navigate('/dashboard', { replace: true })
     }
   }, [navigate])
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!forgotEmail.trim()) {
+      setForgotStatus({ type: 'error', message: 'Por favor ingresa tu usuario o correo.' })
+      return
+    }
+
+    setForgotStatus({ type: '', message: '' })
+    setIsSending(true)
+
+    try {
+      await forgotPassword({ usernameOrEmail: forgotEmail })
+      setForgotStatus({
+        type: 'success',
+        message: 'Si el correo existe, se envió un enlace para restablecer la contraseña.',
+      })
+    } catch (error) {
+      setForgotStatus({ type: 'error', message: error.message || 'No fue posible enviar el enlace.' })
+    } finally {
+      setIsSending(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -327,6 +355,11 @@ function Login() {
             </label>
             <button
               type="button"
+              onClick={() => {
+                setForgotEmail('')
+                setForgotStatus({ type: '', message: '' })
+                setShowForgot(true)
+              }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -397,6 +430,130 @@ function Login() {
           </button>
         </p>
       </div>
+
+      {/* Modal Olvidé mi contraseña */}
+      {showForgot && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 12, 20, 0.7)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            zIndex: 50,
+          }}
+          onClick={() => setShowForgot(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              padding: '2rem',
+              width: '100%',
+              maxWidth: 440,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: '#102a38', fontFamily: "'Outfit', sans-serif" }}>
+                🔑 Recuperar contraseña
+              </h2>
+              <p style={{ margin: 0, fontSize: 13, color: '#5a7180', fontFamily: "'Outfit', sans-serif" }}>
+                Ingresa tu usuario o correo. Te enviaremos un enlace para restablecer tu contraseña.
+              </p>
+            </div>
+
+            {forgotStatus.message && (
+              <div
+                style={{
+                  marginBottom: '1rem',
+                  border: `1px solid ${forgotStatus.type === 'success' ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                  background: forgotStatus.type === 'success' ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
+                  color: forgotStatus.type === 'success' ? '#047857' : '#b91c1c',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  fontFamily: "'Outfit', sans-serif",
+                }}
+              >
+                {forgotStatus.message}
+              </div>
+            )}
+
+            <form onSubmit={handleForgotSubmit}>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#334e5e', marginBottom: 6, fontFamily: "'Outfit', sans-serif" }}>
+                  Usuario o correo
+                </label>
+                <input
+                  type="text"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="Ej: jperez o jperez@correo.com"
+                  disabled={isSending}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    border: '1px solid #d1dce3',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    fontSize: 14,
+                    color: '#102a38',
+                    fontFamily: "'Outfit', sans-serif",
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(false)}
+                  disabled={isSending}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: '#eef3f6',
+                    color: '#334e5e',
+                    border: 'none',
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 500,
+                    fontFamily: "'Outfit', sans-serif",
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSending}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'linear-gradient(135deg, #1ab8d8 0%, #0a8fad 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    fontFamily: "'Outfit', sans-serif",
+                    cursor: 'pointer',
+                    opacity: isSending ? 0.7 : 1,
+                  }}
+                >
+                  {isSending ? 'Enviando...' : 'Enviar enlace'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

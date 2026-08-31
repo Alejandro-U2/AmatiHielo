@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'sonner'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
+import RecuperarContrasena from './components/RecuperarContrasena'
 import { isAuthenticated } from './services/authService'
 
 function ProtectedRoute({ children }) {
@@ -18,6 +19,7 @@ function App() {
       <Toaster position="top-right" richColors />
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/recuperar" element={<RecuperarContrasena />} />
         <Route
           path="/dashboard"
           element={(
