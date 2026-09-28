@@ -85,7 +85,12 @@ export async function login({ username, password, rememberMe }) {
   }
 
   if (!response.ok) {
-    throw new Error(payload?.message || 'No fue posible iniciar sesión.')
+    const err = new Error(payload?.message || 'No fue posible iniciar sesión.')
+    if (payload?.inactive) {
+      err.inactive = true
+      err.userName = payload?.userName || trimmedUsername
+    }
+    throw err
   }
 
   const token = payload?.token

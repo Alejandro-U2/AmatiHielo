@@ -16,7 +16,7 @@ function ProtectedRoute({ children }) {
 function App() {
   return (
     <Router>
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-center" richColors closeButton />
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/recuperar" element={<RecuperarContrasena />} />

@@ -4,6 +4,8 @@ import express from 'express'
 import authRoutes from './routes/authRoutes.js'
 import usersRoutes from './routes/usersRoutes.js'
 import inventarioRoutes from './routes/inventarioRoutes.js'
+import posRoutes from './routes/posRoutes.js'
+import recetasRoutes from './routes/recetasRoutes.js'
 
 dotenv.config()
 
@@ -29,6 +31,8 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/inventario', inventarioRoutes)
+app.use('/api/pos', posRoutes)
+app.use('/api/recetas', recetasRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Ruta no encontrada.' })

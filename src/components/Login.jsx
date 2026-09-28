@@ -15,6 +15,8 @@ function Login() {
   const [forgotEmail, setForgotEmail] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [forgotStatus, setForgotStatus] = useState({ type: '', message: '' })
+  const [showInactive, setShowInactive] = useState(false)
+  const [inactiveUser, setInactiveUser] = useState('')
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -61,7 +63,13 @@ function Login() {
       await login({ username, password, rememberMe })
       navigate('/dashboard', { replace: true })
     } catch (error) {
-      setErrorMessage(error.message || 'Error al iniciar sesión.')
+      if (error.inactive) {
+        setInactiveUser(error.userName || username.trim())
+        setErrorMessage('')
+        setShowInactive(true)
+      } else {
+        setErrorMessage(error.message || 'Error al iniciar sesión.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -551,6 +559,94 @@ function Login() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Usuario Inactivo */}
+      {showInactive && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 12, 20, 0.7)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            zIndex: 60,
+          }}
+          onClick={() => setShowInactive(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              padding: '2rem',
+              width: '100%',
+              maxWidth: 440,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'rgba(239,68,68,0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.25rem',
+            }}>
+              <svg width="32" height="32" fill="none" stroke="#dc2626" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: '#102a38', fontFamily: "'Outfit', sans-serif" }}>
+                Acceso denegado
+              </h2>
+              <p style={{ margin: 0, fontSize: 14, color: '#5a7180', fontFamily: "'Outfit', sans-serif", lineHeight: 1.5 }}>
+                Tu cuenta se encuentra <strong style={{ color: '#dc2626' }}>inactiva</strong>. Contacta a tu administrador para reactivarla.
+              </p>
+            </div>
+            {inactiveUser && (
+              <div style={{
+                marginBottom: '1.25rem',
+                border: '1px solid rgba(239,68,68,0.3)',
+                background: 'rgba(239,68,68,0.06)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                textAlign: 'center',
+              }}>
+                <span style={{ fontSize: 12, color: '#6b7280', fontFamily: "'Outfit', sans-serif", display: 'block' }}>
+                  Usuario
+                </span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#102a38', fontFamily: "'Outfit', sans-serif" }}>
+                  {inactiveUser}
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowInactive(false)}
+              style={{
+                width: '100%',
+                padding: '13px',
+                background: '#eef3f6',
+                color: '#334e5e',
+                border: 'none',
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: "'Outfit', sans-serif",
+                cursor: 'pointer',
+              }}
+            >
+              Entendido
+            </button>
           </div>
         </div>
       )}

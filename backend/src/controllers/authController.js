@@ -69,6 +69,15 @@ export async function login(req, res) {
       .map((value) => String(value).trim())
       .join(' ')
 
+    const stateName = String(state?.nombre || 'Activo').trim().toLowerCase()
+    if (stateName !== 'activo') {
+      return res.status(403).json({
+        inactive: true,
+        userName: profileNombre || profile?.usuario,
+        message: 'Tu cuenta se encuentra inactiva. Contacta a tu administrador para reactivarla.',
+      })
+    }
+
     return res.json({
       token: data.session.access_token,
       user: {

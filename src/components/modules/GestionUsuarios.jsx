@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Mail,
+  MapPin,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+  X,
+} from 'lucide-react'
 import {
   createCompleteUser,
   deleteUserProfile,
@@ -66,6 +81,7 @@ function GestionUsuarios({ currentUserId }) {
   const [formData, setFormData] = useState(initialFormData)
   const [isSaving, setIsSaving] = useState(false)
   const [modalError, setModalError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   const fetchUsers = async () => {
     setIsLoading(true)
@@ -149,7 +165,7 @@ function GestionUsuarios({ currentUserId }) {
     setSelectedUser(user)
     setModalError('')
 
-    if (type === 'edit' && user) {
+    if ((type === 'edit' || type === 'view') && user) {
       setFormData({
         ...(user.primerNombre || user.primerApellido
           ? {
@@ -287,8 +303,11 @@ function GestionUsuarios({ currentUserId }) {
       }
 
       await fetchUsers()
-      toast.success(modalType === 'add' ? 'Usuario creado correctamente.' : 'Usuario actualizado correctamente.')
+      const successMessage = modalType === 'add'
+        ? 'Usuario creado correctamente.'
+        : 'Usuario actualizado correctamente.'
       handleCloseModal()
+      setSuccessMessage(successMessage)
     } catch (error) {
       setModalError(error.message || 'No fue posible guardar el usuario.')
     } finally {
@@ -312,8 +331,8 @@ function GestionUsuarios({ currentUserId }) {
     try {
       await deleteUserProfile(selectedUser.id)
       await fetchUsers()
-      toast.success('Usuario eliminado correctamente.')
       handleCloseModal()
+      setSuccessMessage('Usuario eliminado correctamente.')
     } catch (error) {
       setModalError(error.message || 'No fue posible eliminar el usuario.')
       setIsSaving(false)
@@ -347,6 +366,7 @@ function GestionUsuarios({ currentUserId }) {
   ]
 
   const isFormFieldEnabled = (fieldKey) => {
+    if (modalType === 'view') return false
     if (modalType === 'edit') return true
     const index = formFieldFlow.findIndex((field) => field.key === fieldKey)
     if (index <= 0) return true
@@ -387,7 +407,7 @@ function GestionUsuarios({ currentUserId }) {
               onClick={() => handleOpenModal('add')}
               className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium flex items-center justify-center space-x-2"
             >
-              <span className="text-xl">➕</span>
+              <Plus size={18} aria-hidden="true" />
               <span>Nuevo Usuario</span>
             </button>
             <button
@@ -395,7 +415,7 @@ function GestionUsuarios({ currentUserId }) {
               onClick={fetchUsers}
               className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 transition-all duration-200 shadow-md font-medium flex items-center justify-center space-x-2"
             >
-              <span className="text-xl">🔄</span>
+              <RefreshCw size={18} aria-hidden="true" />
               <span>Recargar</span>
             </button>
           </div>
@@ -416,7 +436,7 @@ function GestionUsuarios({ currentUserId }) {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-4 py-2 pl-10 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
               />
-              <span className="absolute left-3 top-3 text-gray-400">🔍</span>
+              <Search size={18} aria-hidden="true" className="absolute left-3 top-3 text-gray-400" />
             </div>
           </div>
 
@@ -532,11 +552,20 @@ function GestionUsuarios({ currentUserId }) {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center space-x-2">
                       <button
+                        type="button"
+                        onClick={() => handleOpenModal('view', usuario)}
+                        className="bg-gray-100 text-gray-600 p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                        title="Ver"
+                        aria-label={`Ver usuario ${usuario.usuario}`}
+                      >
+                        <Eye size={16} aria-hidden="true" />
+                      </button>
+                      <button
                         onClick={() => handleOpenModal('edit', usuario)}
                         className="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
                         title="Editar"
                       >
-                        ✏️
+                        <Pencil size={16} aria-hidden="true" />
                       </button>
                       <button
                         onClick={() => handleOpenModal('delete', usuario)}
@@ -544,7 +573,7 @@ function GestionUsuarios({ currentUserId }) {
                         title={usuario.id === currentUserId ? 'No puedes eliminar tu propio usuario' : 'Eliminar'}
                         className="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        🗑️
+                        <Trash2 size={16} aria-hidden="true" />
                       </button>
                     </div>
                   </td>
@@ -557,21 +586,32 @@ function GestionUsuarios({ currentUserId }) {
 
       {/* Modal para agregar/editar/eliminar usuario */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-white/70">
+            <div className="p-6 sm:p-7">
               {/* Header del modal */}
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-gray-800">
-                  {modalType === 'add' && '➕ Nuevo Usuario'}
-                  {modalType === 'edit' && '✏️ Editar Usuario'}
-                  {modalType === 'delete' && '🗑️ Eliminar Usuario'}
-                </h3>
+              <div className="flex items-start justify-between gap-4 mb-7">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-cyan-50 text-cyan-700 flex items-center justify-center">
+                    {modalType === 'view' ? <Eye size={22} aria-hidden="true" /> : <UserRound size={22} aria-hidden="true" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-cyan-600">Gestión de usuarios</p>
+                    <h3 className="text-xl font-bold text-gray-800">
+                      {modalType === 'add' && 'Nuevo Usuario'}
+                      {modalType === 'edit' && 'Editar Usuario'}
+                      {modalType === 'view' && 'Detalle del Usuario'}
+                      {modalType === 'delete' && 'Eliminar Usuario'}
+                    </h3>
+                  </div>
+                </div>
                 <button
                   onClick={handleCloseModal}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                  title="Cerrar"
+                  aria-label="Cerrar modal"
                 >
-                  ✕
+                  <X size={22} aria-hidden="true" />
                 </button>
               </div>
 
@@ -649,22 +689,24 @@ function GestionUsuarios({ currentUserId }) {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      {modalType === 'add' ? 'Contraseña' : 'Contraseña nueva (opcional)'}
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => isFormFieldEnabled('password') && handleFormField('password', e.target.value)}
-                      placeholder={modalType === 'add' ? 'Mínimo 6 caracteres' : 'Deja vacío para no cambiar'}
-                      disabled={!isFormFieldEnabled('password')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    {!isFormFieldEnabled('password') && blockingHint('password') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('password')}</p>
-                    )}
-                  </div>
+                  {modalType !== 'view' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        {modalType === 'add' ? 'Contraseña' : 'Contraseña nueva (opcional)'}
+                      </label>
+                      <input
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => isFormFieldEnabled('password') && handleFormField('password', e.target.value)}
+                        placeholder={modalType === 'add' ? 'Mínimo 6 caracteres' : 'Deja vacío para no cambiar'}
+                        disabled={!isFormFieldEnabled('password')}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      {!isFormFieldEnabled('password') && blockingHint('password') && (
+                        <p className="mt-1 text-xs text-amber-600">{blockingHint('password')}</p>
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Rol</label>
@@ -777,15 +819,83 @@ function GestionUsuarios({ currentUserId }) {
                     >
                       Cancelar
                     </button>
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
-                    >
-                      {isSaving ? 'Guardando...' : modalType === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}
-                    </button>
+                    {modalType === 'view' ? (
+                      <button
+                        type="button"
+                        onClick={handleCloseModal}
+                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
+                      >
+                        Cerrar
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
+                      >
+                        {isSaving ? 'Guardando...' : modalType === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}
+                      </button>
+                    )}
                   </div>
                 </form>
+              )}
+
+              {modalType === 'view' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 rounded-xl bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-100 p-4">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center text-xl font-bold">
+                      {(selectedUser?.nombre || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-lg font-bold text-gray-800 truncate">{selectedUser?.nombre || 'Sin registro'}</p>
+                      <p className="text-sm text-gray-600">@{selectedUser?.usuario || 'sin-usuario'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
+                      <ShieldCheck size={14} aria-hidden="true" />
+                      {selectedUser?.rol || 'Sin rol'}
+                    </span>
+                    <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${selectedUser?.estado === 'Activo' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                      {selectedUser?.estado || 'Sin estado'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Mail size={16} aria-hidden="true" />
+                        <p className="text-xs font-semibold uppercase tracking-wide">Email</p>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-gray-800 break-words">{selectedUser?.email || 'Sin registro'}</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <MapPin size={16} aria-hidden="true" />
+                        <p className="text-xs font-semibold uppercase tracking-wide">Ubicación</p>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-gray-800">{selectedUser?.municipio || 'Sin municipio'}</p>
+                      <p className="text-xs text-gray-500">{selectedUser?.departamento || 'Sin departamento'}</p>
+                    </div>
+                    <div className="sm:col-span-2 rounded-xl border border-gray-200 bg-white p-4">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Clock3 size={16} aria-hidden="true" />
+                        <p className="text-xs font-semibold uppercase tracking-wide">Último acceso</p>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-gray-800">{selectedUser?.ultimoAcceso || 'Sin registro'}</p>
+                    </div>
+                  </div>
+                  <div className="pt-4">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition-colors shadow-md font-semibold"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
               )}
 
               {modalType === 'delete' && (
@@ -800,7 +910,10 @@ function GestionUsuarios({ currentUserId }) {
                     <p className="font-bold text-gray-800">{selectedUser?.nombre}</p>
                     <p className="text-sm text-gray-600">@{selectedUser?.usuario}</p>
                   </div>
-                  <p className="text-sm text-red-600 mb-6">⚠️ Esta acción no se puede deshacer.</p>
+                  <p className="text-sm text-red-600 mb-6 flex items-center gap-2">
+                    <AlertTriangle size={16} aria-hidden="true" />
+                    Esta acción no se puede deshacer.
+                  </p>
                   <div className="flex space-x-3">
                     <button
                       type="button"
@@ -822,6 +935,26 @@ function GestionUsuarios({ currentUserId }) {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-emerald-100 p-7 text-center">
+            <div className="mx-auto mb-5 w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 size={36} strokeWidth={2.2} aria-hidden="true" />
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 mb-2">Operación completada</p>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Cambios guardados</h3>
+            <p className="text-sm text-gray-600 mb-6">{successMessage}</p>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage('')}
+              className="w-full rounded-lg bg-gray-900 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+            >
+              Aceptar
+            </button>
           </div>
         </div>
       )}

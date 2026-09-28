@@ -9,6 +9,7 @@ import {
   Factory,
   Home,
   LockKeyhole,
+  ShieldAlert,
   Package,
   ShoppingCart,
   Thermometer,
@@ -19,7 +20,26 @@ import logoAmati from '../assets/logo-amati.jpg'
 import GestionUsuarios from './modules/GestionUsuarios'
 import Inventarios from './modules/Inventarios'
 import ModuloEnProceso from './modules/ModuloEnProceso'
+import ProduccionRecetas from './modules/ProduccionRecetas'
+import Reportes from './modules/Reportes'
 import { getCurrentUser, logout } from '../services/authService'
+
+function ModuleAccessDenied({ moduleName }) {
+  return (
+    <div className="min-h-[420px] flex items-center justify-center">
+      <div className="max-w-lg w-full bg-white border border-red-200 rounded-2xl shadow-md p-10 text-center">
+        <div className="mx-auto mb-5 w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+          <ShieldAlert size={34} aria-hidden="true" />
+        </div>
+        <h3 className="text-2xl font-bold text-gray-800 mb-3">No tiene acceso al módulo</h3>
+        <p className="text-gray-600">
+          Su usuario no cuenta con permisos para ingresar a {moduleName || 'este módulo'}.
+        </p>
+        <p className="text-sm text-gray-500 mt-2">Contacte al administrador del sistema.</p>
+      </div>
+    </div>
+  )
+}
 
 function Dashboard() {
   const navigate = useNavigate()
@@ -34,6 +54,16 @@ function Dashboard() {
   const activeViews = {
     seguridad: <GestionUsuarios currentUserId={currentUser?.id} />,
     inventarios: <Inventarios />,
+    produccion: <ProduccionRecetas />,
+    reportes: <Reportes />,
+  }
+
+  const hasModuleAccess = (module) => {
+    if (!module?.allowedRoles) {
+      return true
+    }
+
+    return module.allowedRoles.includes(userRole)
   }
 
   const handleLogout = () => {
@@ -55,6 +85,7 @@ function Dashboard() {
       icon: LockKeyhole,
       description: 'Gestion de usuarios y permisos',
       estado: 'activo',
+      allowedRoles: ['administrador', 'superusuario', 'admin'],
       features: ['Gestion de Usuarios', 'Bitacora de Eventos', 'Niveles de Acceso'],
     },
     {
@@ -70,7 +101,7 @@ function Dashboard() {
       name: 'Recetas de Venta',
       icon: Factory,
       description: 'BOM para consumo directo en POS',
-      estado: 'en_proceso',
+      estado: 'activo',
       features: ['Bill of Materials (BOM)', 'Vinculo con Inventario', 'Costeo de Venta'],
     },
     {
@@ -87,6 +118,7 @@ function Dashboard() {
       icon: Database,
       description: 'Administración de tablas y campos del sistema',
       estado: 'en_proceso',
+      allowedRoles: ['administrador', 'superusuario', 'admin'],
       features: ['Explorador de Tablas', 'Creación de Estructuras', 'Eliminación Controlada'],
     },
     ...(isAdminUser ? [{
@@ -103,6 +135,7 @@ function Dashboard() {
       icon: Bot,
       description: 'Analisis inteligente de datos',
       estado: 'en_proceso',
+      allowedRoles: ['administrador', 'superusuario', 'admin'],
       features: ['Analisis Climatico', 'Prediccion de Demanda', 'Recomendaciones'],
     },
     {
@@ -110,7 +143,8 @@ function Dashboard() {
       name: 'Reportes',
       icon: BarChart3,
       description: 'Gestion y exportacion de reportes del sistema',
-      estado: 'en_proceso',
+      estado: 'activo',
+      allowedRoles: ['administrador', 'superusuario', 'admin'],
       features: ['Ventas', 'Inventario', 'Produccion', 'Finanzas'],
     },
   ]
@@ -134,7 +168,7 @@ function Dashboard() {
 
         <nav className="flex-1 p-4 overflow-y-auto">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Modulos</p>
-          {modules.map((module) => {
+                    {modules.filter((module) => hasModuleAccess(module)).map((module) => {
             const ModuleIcon = module.icon
 
             return (
@@ -197,101 +231,77 @@ function Dashboard() {
                 <p className="text-cyan-100">Panel de control centralizado - Selecciona un modulo del menu lateral</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-600 text-sm font-medium">Ventas Hoy</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">Q8,450</p>
-                    </div>
-                    <div className="bg-green-100 p-4 rounded-full">
-                      <Wallet className="text-green-700" size={28} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-600 text-sm font-medium">Stock Disponible</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">1,240</p>
-                    </div>
-                    <div className="bg-blue-100 p-4 rounded-full">
-                      <Box className="text-blue-700" size={28} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-600 text-sm font-medium">Produccion</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">850 kg</p>
-                    </div>
-                    <div className="bg-purple-100 p-4 rounded-full">
-                      <Factory className="text-purple-700" size={28} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-600 text-sm font-medium">Temperatura</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">28°C</p>
-                    </div>
-                    <div className="bg-orange-100 p-4 rounded-full">
-                      <Thermometer className="text-orange-700" size={28} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {modules.filter((module) => module.id !== 'inicio').map((module) => {
-                  const ModuleIcon = module.icon
+              <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 mb-5 md:mb-6">
+                {[
+                  { label: 'Ventas Hoy', value: 'Q8,450', change: '+12%', detail: 'vs. ayer', icon: Wallet, tone: 'green' },
+                  { label: 'Stock Disponible', value: '1,240', change: '-5%', detail: 'vs. semana anterior', icon: Box, tone: 'blue', negative: true },
+                  { label: 'Producción', value: '850 kg', change: '+8%', detail: 'vs. ayer', icon: Factory, tone: 'purple' },
+                  { label: 'Temperatura', value: '28°C', change: 'En rango', detail: '', icon: Thermometer, tone: 'orange' },
+                ].map((metric) => {
+                  const MetricIcon = metric.icon
 
                   return (
-                    <div
-                      key={module.id}
-                      className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-all duration-200 cursor-pointer"
-                      onClick={() => setActiveModule(module.id)}
-                    >
-                      <div className="flex items-start mb-4">
-                        <div className="w-14 h-14 mr-4 rounded-xl bg-cyan-50 text-cyan-700 flex items-center justify-center flex-shrink-0">
-                          <ModuleIcon size={30} strokeWidth={1.9} />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
-                            {module.name}
-                            {module.estado === 'en_proceso' && (
-                              <span className="text-[10px] px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">
-                                En Proceso
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-sm text-gray-600">{module.description}</p>
+                    <div key={metric.label} className={`dashboard-kpi dashboard-tone-${metric.tone}`}>
+                      <div className="dashboard-kpi-icon"><MetricIcon size={25} strokeWidth={2.2} /></div>
+                      <div className="min-w-0">
+                        <p className="dashboard-kpi-label">{metric.label}</p>
+                        <p className="dashboard-kpi-value">{metric.value}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className={`dashboard-kpi-change ${metric.negative ? 'is-negative' : ''}`}>{metric.negative ? '↓' : metric.label === 'Temperatura' ? '' : '↑'} {metric.change}</span>
+                          {metric.detail && <span className="dashboard-kpi-detail">{metric.detail}</span>}
                         </div>
                       </div>
-                      {module.features && (
-                        <ul className="space-y-2">
-                          {module.features.map((feature, idx) => (
-                            <li key={idx} className="text-sm text-gray-700 flex items-center">
-                              <ChevronRight className="text-cyan-500 mr-2 flex-shrink-0" size={16} />
-                              {feature}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      <div className="dashboard-sparkline" aria-hidden="true" />
+                      <button type="button" className="dashboard-round-action" aria-label={`Ver ${metric.label}`}>
+                        <ChevronRight size={18} />
+                      </button>
                     </div>
                   )
                 })}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                {modules
+                  .filter((module) => module.id !== 'inicio' && hasModuleAccess(module))
+                  .map((module) => {
+                    const ModuleIcon = module.icon
+
+                    return (
+                      <button
+                        key={module.id}
+                        type="button"
+                        className={`dashboard-module-card dashboard-module-${module.id}`}
+                        onClick={() => setActiveModule(module.id)}
+                      >
+                        <div className="dashboard-module-copy">
+                          <h3>{module.name}</h3>
+                          <p>{module.description}</p>
+                          {module.estado === 'en_proceso' && (
+                            <span className="text-[10px] px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">
+                              En Proceso
+                            </span>
+                          )}
+                        </div>
+                        <span className="dashboard-module-hero-icon" aria-hidden="true">
+                          <ModuleIcon size={88} strokeWidth={1.45} />
+                        </span>
+                        <span className="dashboard-module-arrow"><ChevronRight size={19} /></span>
+                      </button>
+                    )
+                  })}
+                <div className="dashboard-brand-card">
+                  <img src={logoAmati} alt="AMATI HIELO" />
+                  <strong>AMATI HIELO</strong>
+                  <span>Control hoy, crecimiento mañana.</span>
+                </div>
               </div>
             </>
           )}
 
           {activeModule !== 'inicio' && (
-            activeViews[activeModule] || <ModuloEnProceso module={activeModuleInfo} />
+            hasModuleAccess(activeModuleInfo)
+              ? activeViews[activeModule] || <ModuloEnProceso module={activeModuleInfo} />
+              : <ModuleAccessDenied moduleName={activeModuleInfo?.name} />
           )}
         </div>
       </main>
