@@ -21,6 +21,7 @@ import GestionUsuarios from './modules/GestionUsuarios'
 import Inventarios from './modules/Inventarios'
 import ModuloEnProceso from './modules/ModuloEnProceso'
 import ProduccionRecetas from './modules/ProduccionRecetas'
+import PuntoVenta from './modules/PuntoVenta'
 import Reportes from './modules/Reportes'
 import { getCurrentUser, logout } from '../services/authService'
 
@@ -55,6 +56,7 @@ function Dashboard() {
     seguridad: <GestionUsuarios currentUserId={currentUser?.id} />,
     inventarios: <Inventarios />,
     produccion: <ProduccionRecetas />,
+    pos: <PuntoVenta />,
     reportes: <Reportes />,
   }
 
@@ -109,7 +111,7 @@ function Dashboard() {
       name: 'Punto de Venta',
       icon: ShoppingCart,
       description: 'Sistema POS integrado',
-      estado: 'en_proceso',
+      estado: 'activo',
       features: ['Registro de Ventas', 'Sincronizacion de Salidas', 'Facturacion'],
     },
     {
