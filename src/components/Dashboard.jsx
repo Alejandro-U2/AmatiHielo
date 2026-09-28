@@ -19,6 +19,7 @@ import {
 import logoAmati from '../assets/logo-amati.jpg'
 import GestionUsuarios from './modules/GestionUsuarios'
 import Inventarios from './modules/Inventarios'
+import ConfiguracionSistema from './modules/ConfiguracionSistema'
 import ModuloEnProceso from './modules/ModuloEnProceso'
 import ProduccionRecetas from './modules/ProduccionRecetas'
 import PuntoVenta from './modules/PuntoVenta'
@@ -55,6 +56,7 @@ function Dashboard() {
   const activeViews = {
     seguridad: <GestionUsuarios currentUserId={currentUser?.id} />,
     inventarios: <Inventarios />,
+    'configuracion-sistema': <ConfiguracionSistema />,
     produccion: <ProduccionRecetas />,
     pos: <PuntoVenta />,
     reportes: <Reportes />,
@@ -128,7 +130,7 @@ function Dashboard() {
       name: 'Configuración del Sistema',
       icon: SlidersHorizontal,
       description: 'Parámetros globales, sucursales e impuestos',
-      estado: 'en_proceso',
+      estado: 'activo',
       features: ['Datos de la Empresa', 'Sucursales', 'Notificaciones', 'Umbrales'],
     }] : []),
     {

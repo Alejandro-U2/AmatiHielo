@@ -390,7 +390,7 @@ function getEstadoTexto(stock, minimo) {
 | **Punto de Venta** | `pos` | En Proceso | Registro de ventas, sincronizacion de salidas, facturacion | Carrito, metodos de pago, facturacion, tickets |
 | **Recetas de Venta** | `produccion` | En Proceso | Bill of Materials, vinculo con inventario, costeo | ABM recetas, ingredientes, costos |
 | **Mantenimiento de datos** | `estructura-datos` | En Proceso | Explorador de tablas, creacion de estructuras | CRUD dinamico via diccionario de datos |
-| **Configuracion del Sistema** | `configuracion-sistema` | En Proceso | Datos empresa, sucursales, notificaciones, umbrales | Solo visible para admin |
+| **Configuracion del Sistema** | `configuracion-sistema` | Completo | Datos empresa, sucursales, impuestos, notificaciones, umbrales y auditoria | Solo visible para admin |
 | **IA Predictiva** | `ia` | En Proceso | Analisis climatico, prediccion de demanda, recomendaciones | Tabla `historial_clima` disponible |
 | **Reportes** | `reportes` | En Proceso | Ventas, inventario, produccion, finanzas | Exportacion PDF/Excel (librerias ya instaladas) |
 
