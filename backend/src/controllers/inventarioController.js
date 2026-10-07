@@ -147,6 +147,9 @@ function normalizeMovimientoPayload(body = {}) {
     tipo,
     cantidad,
     motivo: body.motivo?.trim() || null,
+    motivo_tipo: body.motivoTipo?.trim() || null,
+    fecha: body.fecha || null,
+    documento_path: body.documentoPath || null,
     usuario: body.usuario?.trim() || null,
   }
 }
@@ -212,7 +215,7 @@ export async function listMovimientos(req, res) {
 
     let query = supabaseAdmin
       .from('movimiento_inventario')
-      .select('id, producto_id, proveedor_id, tipo, cantidad, motivo, usuario, created_at')
+      .select('id, producto_id, proveedor_id, tipo, cantidad, motivo, usuario, created_at, motivo_tipo, fecha_movimiento, costo_unitario_movimiento, stock_antes, stock_despues, documento_path')
 
     if (productoIds) {
       query = query.in('producto_id', productoIds)
@@ -300,12 +303,10 @@ export async function listMovimientos(req, res) {
     const proveedorMap = new Map()
     ;(proveedores || []).forEach(p => proveedorMap.set(p.id, p))
 
-    const facturaNumeros = [...new Set(
-      movimientos
-        .filter((movimiento) => movimiento.tipo === 'Entrada')
-        .map((movimiento) => movimiento.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim())
-        .filter(Boolean),
-    )]
+    const facturaNumeros = [...new Set(movimientos
+      .filter((movimiento) => movimiento.tipo === 'Entrada')
+      .map((movimiento) => movimiento.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim())
+      .filter(Boolean))]
     const { data: entradas, error: errorEntradas } = facturaNumeros.length
       ? await supabaseAdmin
         .from('entrada_inventario')
@@ -324,6 +325,12 @@ export async function listMovimientos(req, res) {
         .createSignedUrl(entrada.documento_path, 60 * 60)
       if (signedUrlData?.signedUrl) documentoMap.set(entrada.numero_factura, signedUrlData.signedUrl)
     }))
+    await Promise.all((movimientos || []).filter((movimiento) => movimiento.documento_path).map(async (movimiento) => {
+      const { data: signedUrlData } = await supabaseAdmin.storage
+        .from('entrada-inventario-documentos')
+        .createSignedUrl(movimiento.documento_path, 60 * 60)
+      if (signedUrlData?.signedUrl) documentoMap.set(movimiento.id, signedUrlData.signedUrl)
+    }))
 
     const dataWithProductos = movimientos.map(m => {
       const numeroFactura = m.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim()
@@ -331,7 +338,7 @@ export async function listMovimientos(req, res) {
         ...m,
         producto: productoMap.get(m.producto_id) || null,
         proveedor: proveedorMap.get(m.proveedor_id) || null,
-        documento_url: numeroFactura ? documentoMap.get(numeroFactura) || null : null,
+        documento_url: documentoMap.get(m.id) || (numeroFactura ? documentoMap.get(numeroFactura) || null : null),
       }
     })
 
@@ -525,6 +532,9 @@ export async function createMovimiento(req, res) {
       p_usuario: usuario,
       p_unidad_compra_id: payload.unidad_compra_id ?? null,
       p_proveedor_id: payload.proveedor_id ?? null,
+      p_motivo_tipo: payload.motivo_tipo,
+      p_fecha: payload.fecha,
+      p_documento_path: payload.documento_path,
     }
 
     const { data, error } = await supabaseAdmin.rpc('registrar_movimiento_inventario', rpcArgs)
