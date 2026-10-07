@@ -489,6 +489,47 @@ export async function createMovimiento(req, res) {
   }
 }
 
+export async function createEntradaInventario(req, res) {
+  const body = req.body || {}
+  const detalles = Array.isArray(body.detalles) ? body.detalles : []
+  const proveedorId = Number(body.proveedorId ?? body.proveedor_id)
+  const numeroFactura = String(body.numeroFactura ?? body.numero_factura ?? '').trim()
+  if (!Number.isInteger(proveedorId) || !numeroFactura || detalles.length === 0) {
+    return res.status(400).json({ message: 'Proveedor, numero de factura y al menos un producto son obligatorios.' })
+  }
+  const normalizedDetalles = detalles.map((detalle) => ({
+    producto_id: Number(detalle.productoId ?? detalle.producto_id),
+    unidad: String(detalle.unidad || 'unidad').trim(),
+    cantidad: Number(detalle.cantidad),
+    costo_unitario: Number(detalle.costoUnitario ?? detalle.costo_unitario),
+    lote: detalle.lote ? String(detalle.lote).trim() : null,
+    fecha_vencimiento: detalle.fechaVencimiento ?? detalle.fecha_vencimiento ?? null,
+  }))
+  if (normalizedDetalles.some((detalle) => !Number.isInteger(detalle.producto_id)
+    || detalle.cantidad <= 0 || Number.isNaN(detalle.cantidad)
+    || detalle.costo_unitario < 0 || Number.isNaN(detalle.costo_unitario))) {
+    return res.status(400).json({ message: 'Revisa los productos, cantidades y costos de la entrada.' })
+  }
+  try {
+    const responsable = req.auth?.profile?.nombre || req.auth?.user?.email || 'Sistema'
+    const { data, error } = await supabaseAdmin.rpc('registrar_entrada_inventario', {
+      p_proveedor_id: proveedorId,
+      p_numero_factura: numeroFactura,
+      p_fecha: body.fecha || null,
+      p_fecha_factura: body.fechaFactura || body.fecha_factura || null,
+      p_responsable: responsable,
+      p_observaciones: body.observaciones || null,
+      p_documento_path: body.documentoPath || body.documento_path || null,
+      p_detalles: normalizedDetalles,
+      p_confirmar: body.estado === 'Confirmada' || body.confirmar === true,
+    })
+    if (error || !data) return buildErrorResponse(res, error, 'No fue posible guardar la entrada.', 400)
+    return res.status(201).json({ data: Array.isArray(data) ? data[0] : data })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible guardar la entrada.')
+  }
+}
+
 export async function createProducto(req, res) {
   const payload = normalizeProductoPayload(req.body, { includeStock: true })
 

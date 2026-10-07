@@ -2,6 +2,7 @@ import { Router } from 'express'
 import {
 	createProducto,
 	createMovimiento,
+	createEntradaInventario,
 	deleteProducto,
 	listCategorias,
 	listMovimientos,
@@ -26,6 +27,7 @@ router.get('/tipos-movimiento', listTiposMovimiento)
 router.get('/movimiento', listMovimientos)
 router.get('/proveedor', listProveedores)
 router.post('/movimiento', createMovimiento)
+router.post('/entrada', createEntradaInventario)
 router.post('/proveedor', requireAdmin, createProveedor)
 router.put('/proveedor/:id', requireAdmin, updateProveedor)
 router.delete('/proveedor/:id', requireAdmin, deleteProveedor)
