@@ -603,7 +603,7 @@ function Inventarios() {
     try {
       if (!entradaForm.proveedorId || !entradaForm.numeroFactura.trim()) throw new Error('Proveedor y número de factura son obligatorios.')
       if (entradaForm.detalles.some((detalle) => !detalle.productoId || Number(detalle.cantidad) <= 0 || Number(detalle.costoUnitario) < 0)) throw new Error('Completa producto, cantidad y costo de cada fila.')
-      const documentoPath = await uploadEntradaInventarioDocumento(entradaForm.documento, `entrada-${Date.now()}`)
+      const documentoPath = await uploadEntradaInventarioDocumento(entradaForm.documento)
       await createEntradaInventario({
         fecha: entradaForm.fecha, proveedorId: Number(entradaForm.proveedorId), numeroFactura: entradaForm.numeroFactura,
         fechaFactura: entradaForm.fechaFactura || null, observaciones: entradaForm.observaciones, documentoPath,

@@ -1,5 +1,4 @@
 import { getAccessToken } from './authService'
-import { supabase } from './supabaseClient'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '')
 
@@ -191,15 +190,17 @@ export async function createMovimientoInventario(input) {
   return normalizeMovimiento(payload?.data || {})
 }
 
-export async function uploadEntradaInventarioDocumento(file, numero) {
+export async function uploadEntradaInventarioDocumento(file) {
   if (!file) return null
   const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'bin'
-  const path = `${new Date().getFullYear()}/${numero}-${crypto.randomUUID()}.${extension}`
-  const { error } = await supabase.storage
-    .from('entrada-inventario-documentos')
-    .upload(path, file, { upsert: false, contentType: file.type || undefined })
-  if (error) throw new Error(error.message || 'No fue posible cargar el documento.')
-  return path
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+  const payload = await request('/api/inventario/entrada/documento', {
+    method: 'POST',
+    body: { contenido: btoa(binary), tipo: file.type, extension },
+  })
+  return payload?.data?.path || null
 }
 
 export async function createEntradaInventario(input) {
