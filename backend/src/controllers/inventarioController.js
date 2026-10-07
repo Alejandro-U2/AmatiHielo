@@ -148,6 +148,7 @@ function normalizeMovimientoPayload(body = {}) {
     cantidad,
     motivo: body.motivo?.trim() || null,
     motivo_tipo: body.motivoTipo?.trim() || null,
+    motivo_merma_id: Number.isNaN(Number(body.motivoMermaId)) ? null : Number(body.motivoMermaId),
     fecha: body.fecha || null,
     documento_path: body.documentoPath || null,
     usuario: body.usuario?.trim() || null,
@@ -508,6 +509,21 @@ export async function listTiposMovimiento(req, res) {
   }
 }
 
+export async function listMotivosMerma(req, res) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('motivo_merma')
+      .select('id, codigo, nombre, descripcion, activo, es_sistema, orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('nombre', { ascending: true })
+    if (error) return buildErrorResponse(res, error, 'No fue posible cargar los motivos de merma.')
+    return res.json({ data: data || [] })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible cargar los motivos de merma.')
+  }
+}
+
 export async function createMovimiento(req, res) {
   const payload = normalizeMovimientoPayload(req.body)
 
@@ -535,6 +551,7 @@ export async function createMovimiento(req, res) {
       p_motivo_tipo: payload.motivo_tipo,
       p_fecha: payload.fecha,
       p_documento_path: payload.documento_path,
+      p_motivo_merma_id: payload.motivo_merma_id,
     }
 
     const { data, error } = await supabaseAdmin.rpc('registrar_movimiento_inventario', rpcArgs)

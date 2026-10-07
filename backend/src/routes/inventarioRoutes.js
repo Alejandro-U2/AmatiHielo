@@ -10,6 +10,7 @@ import {
 	listProductos,
 	listProveedores,
 	listTiposMovimiento,
+	listMotivosMerma,
 	createProveedor,
 	deleteProveedor,
 	updateProveedor,
@@ -25,6 +26,7 @@ router.use(requireSession)
 router.get('/producto', listProductos)
 router.get('/categorias', listCategorias)
 router.get('/tipos-movimiento', listTiposMovimiento)
+router.get('/motivos-merma', listMotivosMerma)
 router.get('/movimiento', listMovimientos)
 router.get('/proveedor', listProveedores)
 router.post('/movimiento', createMovimiento)
