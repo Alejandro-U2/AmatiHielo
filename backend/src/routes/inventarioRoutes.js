@@ -3,6 +3,7 @@ import {
 	createProducto,
 	createMovimiento,
 	createEntradaInventario,
+	uploadEntradaInventarioDocumento,
 	deleteProducto,
 	listCategorias,
 	listMovimientos,
@@ -28,6 +29,7 @@ router.get('/movimiento', listMovimientos)
 router.get('/proveedor', listProveedores)
 router.post('/movimiento', createMovimiento)
 router.post('/entrada', createEntradaInventario)
+router.post('/entrada/documento', uploadEntradaInventarioDocumento)
 router.post('/proveedor', requireAdmin, createProveedor)
 router.put('/proveedor/:id', requireAdmin, updateProveedor)
 router.delete('/proveedor/:id', requireAdmin, deleteProveedor)

@@ -530,6 +530,34 @@ export async function createEntradaInventario(req, res) {
   }
 }
 
+export async function uploadEntradaInventarioDocumento(req, res) {
+  const { contenido, tipo, extension } = req.body || {}
+  const allowedTypes = new Map([
+    ['application/pdf', 'pdf'],
+    ['image/jpeg', 'jpg'],
+    ['image/png', 'png'],
+  ])
+  const normalizedExtension = allowedTypes.get(tipo)
+  if (!contenido || !normalizedExtension || (extension && extension.toLowerCase() !== normalizedExtension)) {
+    return res.status(400).json({ message: 'El documento debe ser PDF, JPG o PNG.' })
+  }
+
+  try {
+    const buffer = Buffer.from(contenido, 'base64')
+    if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: 'El documento no puede superar 5 MB.' })
+    }
+    const path = `${new Date().getFullYear()}/entrada-${Date.now()}-${crypto.randomUUID()}.${normalizedExtension}`
+    const { error } = await supabaseAdmin.storage
+      .from('entrada-inventario-documentos')
+      .upload(path, buffer, { upsert: false, contentType: tipo })
+    if (error) return buildErrorResponse(res, error, 'No fue posible cargar el documento.', 400)
+    return res.status(201).json({ data: { path } })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible cargar el documento.')
+  }
+}
+
 export async function createProducto(req, res) {
   const payload = normalizeProductoPayload(req.body, { includeStock: true })
 
