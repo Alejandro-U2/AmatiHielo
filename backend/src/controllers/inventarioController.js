@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
+import { parseListQuery } from '../utils/listQuery.js'
 
 function buildErrorResponse(res, error, fallbackMessage, statusCode = 500) {
   return res.status(statusCode).json({
@@ -15,7 +16,7 @@ function parseOptionalNumber(value) {
   return Number.isNaN(parsed) ? Number.NaN : parsed
 }
 
-function calculateUnitCost({ precioCompra, cantidadCompra, precioPaquete }) {
+export function calculateUnitCost({ precioCompra, cantidadCompra, precioPaquete }) {
   if (cantidadCompra !== null && precioPaquete !== null) {
     if (cantidadCompra <= 0 || precioPaquete < 0) {
       return Number.NaN
@@ -87,14 +88,38 @@ function isProductoPayloadValid(payload) {
   return true
 }
 
+function normalizeMovimientoTipo(value) {
+  const tipo = String(value ?? '').trim()
+
+  if (!tipo) {
+    return ''
+  }
+
+  const tipoLower = tipo.toLowerCase()
+
+  switch (tipoLower) {
+    case 'entrada':
+      return 'Entrada'
+    case 'salida':
+      return 'Salida'
+    case 'merma':
+      return 'Merma'
+    case 'ajuste':
+      return 'Ajuste'
+    default:
+      return tipo
+  }
+}
+
 function normalizeMovimientoPayload(body = {}) {
   const productoId = Number(body.productoId ?? body.producto_id)
   const unidadCompraId = Number(body.unidadCompraId ?? body.unidad_compra_id)
   const cantidad = parseOptionalNumber(body.cantidad)
-  const tipo = String(body.tipo || '').trim()
+  const tipo = normalizeMovimientoTipo(body.tipo)
 
   return {
     producto_id: Number.isNaN(productoId) ? null : productoId,
+    proveedor_id: Number.isNaN(Number(body.proveedorId ?? body.proveedor_id)) ? null : Number(body.proveedorId ?? body.proveedor_id),
     unidad_compra_id: Number.isNaN(unidadCompraId) ? null : unidadCompraId,
     tipo,
     cantidad,
@@ -106,6 +131,7 @@ function normalizeMovimientoPayload(body = {}) {
 const PRODUCTO_FIELDS = 'id, codigo, nombre, categoria, stock, minimo, unidad, cantidad_compra, precio_paquete, costo_unitario, precio_compra, precio_venta, estado, created_at, updated_at'
 const CATEGORIA_FIELDS = 'id, codigo, nombre, descripcion, activo, es_sistema, orden, created_at, updated_at'
 const TIPO_MOVIMIENTO_FIELDS = 'id, codigo, nombre, descripcion, activo, es_sistema, orden, created_at, updated_at'
+const PROVEEDOR_FIELDS = 'id, codigo, nombre, nit, telefono, correo, activo, created_at, updated_at'
 
 export async function listProductos(req, res) {
   try {
@@ -124,44 +150,264 @@ export async function listProductos(req, res) {
   }
 }
 
+const MOVIMIENTO_SORT_COLUMNS = {
+  fecha: 'created_at',
+  tipo: 'tipo',
+  cantidad: 'cantidad',
+  usuario: 'usuario',
+}
+
 export async function listMovimientos(req, res) {
   try {
-    const { data: movimientos, error } = await supabaseAdmin
+    const params = parseListQuery(req.query, {
+      sortColumns: MOVIMIENTO_SORT_COLUMNS,
+      defaultSort: 'fecha',
+    })
+
+    let productoIds = null
+
+    if (params.search) {
+      const { data: productosMatch, error: errorMatch } = await supabaseAdmin
+        .from('producto')
+        .select('id')
+        .ilike('nombre', `%${params.search}%`)
+        .or(`codigo.ilike.%${params.search}%`)
+
+      if (errorMatch) {
+        return buildErrorResponse(res, errorMatch, 'No fue posible filtrar los movimientos por producto.')
+      }
+
+      productoIds = (productosMatch || []).map((p) => p.id)
+
+      if (productoIds.length === 0) {
+        return res.json({
+          data: [],
+          meta: { total: 0, page: params.page, pageSize: params.pageSize },
+        })
+      }
+    }
+
+    let query = supabaseAdmin
       .from('movimiento_inventario')
-      .select('id, producto_id, tipo, cantidad, motivo, usuario, created_at')
-      .order('created_at', { ascending: false })
+      .select('id, producto_id, proveedor_id, tipo, cantidad, motivo, usuario, created_at')
+
+    if (productoIds) {
+      query = query.in('producto_id', productoIds)
+    }
+    if (typeof req.query.tipo === 'string' && req.query.tipo.trim() !== '') {
+      query = query.eq('tipo', req.query.tipo.trim())
+    }
+    if (params.desde) {
+      query = query.gte('created_at', params.desde)
+    }
+    if (params.hasta) {
+      query = query.lte('created_at', params.hasta)
+    }
+
+    let total = null
+
+    if (params.paginate) {
+      let countQuery = supabaseAdmin
+        .from('movimiento_inventario')
+        .select('id', { count: 'exact', head: true })
+
+      if (productoIds) {
+        countQuery = countQuery.in('producto_id', productoIds)
+      }
+      if (typeof req.query.tipo === 'string' && req.query.tipo.trim() !== '') {
+        countQuery = countQuery.eq('tipo', req.query.tipo.trim())
+      }
+      if (params.desde) {
+        countQuery = countQuery.gte('created_at', params.desde)
+      }
+      if (params.hasta) {
+        countQuery = countQuery.lte('created_at', params.hasta)
+      }
+
+      const { count, error: errorCount } = await countQuery
+      if (errorCount) {
+        return buildErrorResponse(res, errorCount, 'No fue posible contar los movimientos.')
+      }
+      total = count || 0
+    }
+
+    query = query.order(MOVIMIENTO_SORT_COLUMNS[params.sortBy] || 'created_at', { ascending: params.sortDir === 'asc' })
+
+    if (params.paginate) {
+      const offset = (params.page - 1) * params.pageSize
+      query = query.range(offset, offset + params.pageSize - 1)
+    }
+
+    const { data: movimientos, error } = await query
 
     if (error) {
       return buildErrorResponse(res, error, 'No fue posible cargar los movimientos.')
     }
 
     if (!movimientos || movimientos.length === 0) {
-      return res.json({ data: [] })
+      return res.json({
+        data: [],
+        meta: total === null ? undefined : { total, page: params.page, pageSize: params.pageSize },
+      })
     }
 
-    // Traer datos de productos en una segunda query
-    const productoIds = [...new Set(movimientos.map(m => m.producto_id))]
+    // Traer datos de productos solo para la página actual
+    const ids = [...new Set(movimientos.map(m => m.producto_id))]
     const { data: productos, error: errorProductos } = await supabaseAdmin
       .from('producto')
       .select('id, codigo, nombre')
-      .in('id', productoIds)
+      .in('id', ids)
 
     if (errorProductos) {
       return buildErrorResponse(res, errorProductos, 'No fue posible cargar datos de productos.')
     }
 
+    const proveedorIds = [...new Set(movimientos.map((movimiento) => movimiento.proveedor_id).filter(Boolean))]
+    const { data: proveedores, error: errorProveedores } = proveedorIds.length
+      ? await supabaseAdmin.from('proveedor').select('id, nombre, codigo').in('id', proveedorIds)
+      : { data: [], error: null }
+
+    if (errorProveedores) {
+      return buildErrorResponse(res, errorProveedores, 'No fue posible cargar datos de proveedores.')
+    }
+
     // Mapear productos a movimientos
     const productoMap = new Map()
     ;(productos || []).forEach(p => productoMap.set(p.id, p))
+    const proveedorMap = new Map()
+    ;(proveedores || []).forEach(p => proveedorMap.set(p.id, p))
 
     const dataWithProductos = movimientos.map(m => ({
       ...m,
       producto: productoMap.get(m.producto_id) || null,
+      proveedor: proveedorMap.get(m.proveedor_id) || null,
     }))
 
-    return res.json({ data: dataWithProductos })
+    return res.json({
+      data: dataWithProductos,
+      meta: total === null ? undefined : { total, page: params.page, pageSize: params.pageSize },
+    })
   } catch (error) {
     return buildErrorResponse(res, error, 'No fue posible cargar los movimientos.')
+  }
+}
+
+export async function listProveedores(req, res) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('proveedor')
+        .select(PROVEEDOR_FIELDS)
+        .order('activo', { ascending: false })
+        .order('nombre', { ascending: true })
+
+      if (error) {
+        return buildErrorResponse(res, error, 'No fue posible cargar los proveedores.')
+      }
+
+      return res.json({ data: data || [] })
+    } catch (error) {
+      return buildErrorResponse(res, error, 'No fue posible cargar los proveedores.')
+    }
+}
+
+function normalizeProveedorPayload(body = {}) {
+      const payload = {
+        nombre: body.nombre?.trim(),
+        nit: body.nit?.trim() || null,
+        telefono: body.telefono?.trim() || null,
+        correo: body.correo?.trim() || null,
+        activo: body.activo !== false,
+      }
+
+      if (body.codigo?.trim()) {
+        payload.codigo = body.codigo.trim()
+      }
+
+      return payload
+}
+
+function isProveedorPayloadValid(payload) {
+    if (!payload.nombre) {
+      return 'El nombre del proveedor es obligatorio.'
+    }
+
+    if (payload.nit && !/^[a-zA-Z0-9]{1,13}$/.test(payload.nit)) {
+      return 'El NIT debe contener únicamente letras y números, con un máximo de 13 caracteres.'
+    }
+
+    if (payload.telefono && !/^\d{1,8}$/.test(payload.telefono)) {
+      return 'El teléfono debe contener únicamente números, con un máximo de 8 dígitos.'
+    }
+
+    return null
+}
+
+export async function createProveedor(req, res) {
+    const payload = normalizeProveedorPayload(req.body)
+    const validationError = isProveedorPayloadValid(payload)
+    if (validationError) {
+      return res.status(400).json({ message: validationError })
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('proveedor')
+        .insert(payload)
+        .select(PROVEEDOR_FIELDS)
+        .single()
+
+      if (error || !data) {
+        return buildErrorResponse(res, error, 'No fue posible crear el proveedor.', 400)
+      }
+      return res.status(201).json({ data })
+    } catch (error) {
+      return buildErrorResponse(res, error, 'No fue posible crear el proveedor.')
+    }
+}
+
+export async function updateProveedor(req, res) {
+    const payload = normalizeProveedorPayload(req.body)
+    const validationError = isProveedorPayloadValid(payload)
+    if (!req.params.id || validationError) {
+      return res.status(400).json({
+        message: !req.params.id ? 'El id y nombre del proveedor son obligatorios.' : validationError,
+      })
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('proveedor')
+        .update(payload)
+        .eq('id', req.params.id)
+        .select(PROVEEDOR_FIELDS)
+        .single()
+
+      if (error || !data) {
+        return buildErrorResponse(res, error, 'No fue posible actualizar el proveedor.', 400)
+      }
+      return res.json({ data })
+    } catch (error) {
+      return buildErrorResponse(res, error, 'No fue posible actualizar el proveedor.')
+    }
+}
+
+export async function deleteProveedor(req, res) {
+    if (!req.params.id) {
+      return res.status(400).json({ message: 'El id del proveedor es obligatorio.' })
+    }
+
+    try {
+      const { error } = await supabaseAdmin
+        .from('proveedor')
+        .update({ activo: false })
+        .eq('id', req.params.id)
+
+      if (error) {
+        return buildErrorResponse(res, error, 'No fue posible desactivar el proveedor.', 400)
+      }
+      return res.status(204).send()
+    } catch (error) {
+      return buildErrorResponse(res, error, 'No fue posible desactivar el proveedor.')
   }
 }
 
@@ -212,6 +458,10 @@ export async function createMovimiento(req, res) {
     })
   }
 
+  if (payload.tipo === 'Entrada' && !payload.proveedor_id) {
+    return res.status(400).json({ message: 'Debes seleccionar un proveedor para registrar una Entrada.' })
+  }
+
   const usuario = req.auth?.profile?.nombre || req.auth?.user?.email || payload.usuario || 'Sistema'
 
   try {
@@ -221,7 +471,8 @@ export async function createMovimiento(req, res) {
       p_cantidad: payload.cantidad,
       p_motivo: payload.motivo,
       p_usuario: usuario,
-      p_unidad_compra_id: payload.unidad_compra_id,
+      p_unidad_compra_id: payload.unidad_compra_id ?? null,
+      p_proveedor_id: payload.proveedor_id ?? null,
     }
 
     const { data, error } = await supabaseAdmin.rpc('registrar_movimiento_inventario', rpcArgs)
