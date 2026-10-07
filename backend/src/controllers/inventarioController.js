@@ -300,11 +300,40 @@ export async function listMovimientos(req, res) {
     const proveedorMap = new Map()
     ;(proveedores || []).forEach(p => proveedorMap.set(p.id, p))
 
-    const dataWithProductos = movimientos.map(m => ({
-      ...m,
-      producto: productoMap.get(m.producto_id) || null,
-      proveedor: proveedorMap.get(m.proveedor_id) || null,
+    const facturaNumeros = [...new Set(
+      movimientos
+        .filter((movimiento) => movimiento.tipo === 'Entrada')
+        .map((movimiento) => movimiento.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim())
+        .filter(Boolean),
+    )]
+    const { data: entradas, error: errorEntradas } = facturaNumeros.length
+      ? await supabaseAdmin
+        .from('entrada_inventario')
+        .select('numero_factura, documento_path')
+        .in('numero_factura', facturaNumeros)
+      : { data: [], error: null }
+
+    if (errorEntradas) {
+      return buildErrorResponse(res, errorEntradas, 'No fue posible cargar los documentos de entradas.')
+    }
+
+    const documentoMap = new Map()
+    await Promise.all((entradas || []).filter((entrada) => entrada.documento_path).map(async (entrada) => {
+      const { data: signedUrlData } = await supabaseAdmin.storage
+        .from('entrada-inventario-documentos')
+        .createSignedUrl(entrada.documento_path, 60 * 60)
+      if (signedUrlData?.signedUrl) documentoMap.set(entrada.numero_factura, signedUrlData.signedUrl)
     }))
+
+    const dataWithProductos = movimientos.map(m => {
+      const numeroFactura = m.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim()
+      return {
+        ...m,
+        producto: productoMap.get(m.producto_id) || null,
+        proveedor: proveedorMap.get(m.proveedor_id) || null,
+        documento_url: numeroFactura ? documentoMap.get(numeroFactura) || null : null,
+      }
+    })
 
     return res.json({
       data: dataWithProductos,

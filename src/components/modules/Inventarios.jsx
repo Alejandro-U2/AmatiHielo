@@ -1336,6 +1336,16 @@ function Inventarios() {
                     <span className="text-xs font-semibold uppercase text-gray-500">Motivo / Observaciones</span>
                     <p className="mt-2 whitespace-pre-wrap rounded-lg border border-gray-200 p-3 text-sm text-gray-700">{selectedItem.motivo || 'Sin observaciones'}</p>
                   </div>
+                  {selectedItem.documentoUrl && (
+                    <a
+                      href={selectedItem.documentoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex w-full items-center justify-center rounded-lg bg-cyan-50 py-3 font-medium text-cyan-700 hover:bg-cyan-100"
+                    >
+                      Ver factura adjunta
+                    </a>
+                  )}
                   <button type="button" onClick={handleCloseModal} className="w-full rounded-lg bg-gray-200 py-3 font-medium text-gray-700 hover:bg-gray-300">Cerrar</button>
                 </div>
               )}

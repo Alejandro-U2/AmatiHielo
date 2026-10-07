@@ -111,6 +111,7 @@ function normalizeMovimiento(row) {
     cantidad: Number(row.cantidad || 0),
     usuario: row.usuario || 'Sistema',
     motivo: row.motivo || 'Sin motivo',
+    documentoUrl: row.documento_url || row.documentoUrl || '',
   }
 }
 
