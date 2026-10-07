@@ -525,8 +525,6 @@ export async function createEntradaInventario(req, res) {
     unidad: String(detalle.unidad || 'unidad').trim(),
     cantidad: Number(detalle.cantidad),
     costo_unitario: Number(detalle.costoUnitario ?? detalle.costo_unitario),
-    lote: detalle.lote ? String(detalle.lote).trim() : null,
-    fecha_vencimiento: detalle.fechaVencimiento ?? detalle.fecha_vencimiento ?? null,
   }))
   if (normalizedDetalles.some((detalle) => !Number.isInteger(detalle.producto_id)
     || detalle.cantidad <= 0 || Number.isNaN(detalle.cantidad)
