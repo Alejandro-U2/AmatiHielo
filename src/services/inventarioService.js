@@ -1,4 +1,5 @@
 import { getAccessToken } from './authService'
+import { supabase } from './supabaseClient'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '')
 
@@ -188,6 +189,25 @@ export async function createMovimientoInventario(input) {
   })
 
   return normalizeMovimiento(payload?.data || {})
+}
+
+export async function uploadEntradaInventarioDocumento(file, numero) {
+  if (!file) return null
+  const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'bin'
+  const path = `${new Date().getFullYear()}/${numero}-${crypto.randomUUID()}.${extension}`
+  const { error } = await supabase.storage
+    .from('entrada-inventario-documentos')
+    .upload(path, file, { upsert: false, contentType: file.type || undefined })
+  if (error) throw new Error(error.message || 'No fue posible cargar el documento.')
+  return path
+}
+
+export async function createEntradaInventario(input) {
+  const payload = await request('/api/inventario/entrada', {
+    method: 'POST',
+    body: input,
+  })
+  return payload?.data || {}
 }
 
 export async function createProductoInventario(input) {

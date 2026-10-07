@@ -19,6 +19,8 @@ import {
 import {
   createProductoInventario,
   createMovimientoInventario,
+  createEntradaInventario,
+  uploadEntradaInventarioDocumento,
   deleteProductoInventario,
   listCategoriasInventario,
   listMovimientosInventario,
@@ -83,6 +85,15 @@ function Inventarios() {
     proveedorId: '',
     cantidad: '',
     motivo: '',
+  })
+  const [entradaForm, setEntradaForm] = useState({
+    fecha: new Date().toISOString().slice(0, 10),
+    proveedorId: '',
+    numeroFactura: '',
+    fechaFactura: '',
+    observaciones: '',
+    documento: null,
+    detalles: [],
   })
   const [proveedorForm, setProveedorForm] = useState({
     nombre: '',
@@ -274,6 +285,20 @@ function Inventarios() {
     })
   }
 
+  const resetEntradaForm = (item = null) => {
+    setEntradaForm({
+      fecha: new Date().toISOString().slice(0, 10),
+      proveedorId: '',
+      numeroFactura: '',
+      fechaFactura: '',
+      observaciones: '',
+      documento: null,
+      detalles: item?.id
+        ? [{ productoId: String(item.id), unidad: item.unidad || 'unidad', cantidad: '', costoUnitario: String(item.precio_compra ?? item.costo_unitario ?? ''), lote: '', fechaVencimiento: '' }]
+        : [{ productoId: '', unidad: 'unidad', cantidad: '', costoUnitario: '', lote: '', fechaVencimiento: '' }],
+    })
+  }
+
   const resetProveedorForm = (item = null) => {
     setProveedorForm({
       nombre: item?.nombre || '',
@@ -449,8 +474,16 @@ function Inventarios() {
       resetProveedorForm(item)
     }
 
-    if (type === 'entrada' || type === 'salida' || type === 'merma') {
+    if (type === 'entrada') {
+      resetEntradaForm(item)
+    }
+
+    if (type === 'salida' || type === 'merma') {
       resetMovimientoForm(item)
+    }
+
+    if (type === 'entrada') {
+      resetEntradaForm(item)
     }
 
     setShowModal(true)
@@ -463,6 +496,7 @@ function Inventarios() {
     setErrorProducto('')
     setProveedorError('')
     resetMovimientoForm()
+    resetEntradaForm()
   }
 
   const handleProductoFormChange = (field, value) => {
@@ -544,6 +578,46 @@ function Inventarios() {
       ...previous,
       [field]: value,
     }))
+  }
+
+  const handleEntradaDetailChange = (index, field, value) => {
+    setEntradaForm((previous) => ({
+      ...previous,
+      detalles: previous.detalles.map((detalle, detailIndex) => {
+        if (detailIndex !== index) return detalle
+        const updated = { ...detalle, [field]: value }
+        if (field === 'productoId') {
+          const producto = productos.find((item) => String(item.id) === String(value))
+          updated.unidad = producto?.unidad || 'unidad'
+          if (!updated.costoUnitario) updated.costoUnitario = String(producto?.precio_compra ?? producto?.costo_unitario ?? '')
+        }
+        return updated
+      }),
+    }))
+  }
+
+  const handleSubmitEntrada = async (event, confirmar = false) => {
+    event.preventDefault()
+    setErrorProducto('')
+    setIsSavingMovimiento(true)
+    try {
+      if (!entradaForm.proveedorId || !entradaForm.numeroFactura.trim()) throw new Error('Proveedor y número de factura son obligatorios.')
+      if (entradaForm.detalles.some((detalle) => !detalle.productoId || Number(detalle.cantidad) <= 0 || Number(detalle.costoUnitario) < 0)) throw new Error('Completa producto, cantidad y costo de cada fila.')
+      const documentoPath = await uploadEntradaInventarioDocumento(entradaForm.documento, `entrada-${Date.now()}`)
+      await createEntradaInventario({
+        fecha: entradaForm.fecha, proveedorId: Number(entradaForm.proveedorId), numeroFactura: entradaForm.numeroFactura,
+        fechaFactura: entradaForm.fechaFactura || null, observaciones: entradaForm.observaciones, documentoPath,
+        estado: confirmar ? 'Confirmada' : 'Borrador',
+        detalles: entradaForm.detalles.map((detalle) => ({ productoId: Number(detalle.productoId), unidad: detalle.unidad, cantidad: Number(detalle.cantidad), costoUnitario: Number(detalle.costoUnitario), lote: detalle.lote || null, fechaVencimiento: detalle.fechaVencimiento || null })),
+      })
+      if (confirmar) await Promise.all([loadProductos(), loadMovimientos()])
+      handleCloseModal()
+      toast.success(confirmar ? 'Entrada confirmada correctamente.' : 'Entrada guardada como borrador.')
+    } catch (error) {
+      setErrorProducto(error.message || 'No fue posible guardar la entrada.')
+    } finally {
+      setIsSavingMovimiento(false)
+    }
   }
 
   const handleSubmitMovimiento = async (event) => {
@@ -1415,7 +1489,38 @@ function Inventarios() {
                 </form>
               )}
 
-              {(modalType === 'entrada' || modalType === 'salida' || modalType === 'merma') && (
+              {modalType === 'entrada' && (
+                <form className="space-y-5" onSubmit={(event) => handleSubmitEntrada(event, true)} noValidate>
+                  {errorProducto && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorProducto}</div>}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div><span className="block text-xs font-semibold text-gray-500">Número</span><span className="font-bold text-cyan-700">Automático</span><p className="text-[11px] text-gray-400">Se asigna al guardar</p></div>
+                    <div><label className="block text-xs font-semibold text-gray-500">Fecha</label><input type="date" value={entradaForm.fecha} onChange={(e) => setEntradaForm({ ...entradaForm, fecha: e.target.value })} className="w-full px-2 py-2 border-2 border-gray-200 rounded-lg" required /></div>
+                    <div><span className="block text-xs font-semibold text-gray-500">Tipo</span><span className="font-semibold text-gray-700">Compra</span></div>
+                    <div><span className="block text-xs font-semibold text-gray-500">Responsable</span><span className="font-semibold text-gray-700">Usuario actual</span></div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Proveedor *</label><select value={entradaForm.proveedorId} onChange={(e) => setEntradaForm({ ...entradaForm, proveedorId: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" required><option value="">Seleccionar proveedor...</option>{proveedores.filter((p) => p.activo).map((p) => <option key={p.id} value={p.id}>{p.nombre} · NIT: {p.nit || 'Sin NIT'}</option>)}</select></div>
+                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Número de factura *</label><input value={entradaForm.numeroFactura} onChange={(e) => setEntradaForm({ ...entradaForm, numeroFactura: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" required /></div>
+                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Fecha de factura</label><input type="date" value={entradaForm.fechaFactura} onChange={(e) => setEntradaForm({ ...entradaForm, fechaFactura: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" /></div>
+                  </div>
+                  <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                    <table className="min-w-[850px] w-full text-sm"><thead className="bg-gray-50"><tr>{['Producto / unidad', 'Cantidad', 'Costo unitario', 'Lote', 'Vencimiento', 'Total', ''].map((label) => <th key={label} className="px-3 py-2 text-left font-semibold text-gray-600">{label}</th>)}</tr></thead><tbody>
+                      {entradaForm.detalles.map((detalle, index) => {
+                        const totalLinea = Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)
+                        return <tr key={`entrada-detalle-${index}`} className="border-t"><td className="px-2 py-2"><select value={detalle.productoId} onChange={(e) => handleEntradaDetailChange(index, 'productoId', e.target.value)} className="w-full px-2 py-2 border rounded-lg" required><option value="">Seleccionar...</option>{productosVigentes.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select><span className="text-xs text-gray-400">{detalle.unidad}</span></td><td className="px-2 py-2"><input type="number" min="0.01" step="0.01" value={detalle.cantidad} onChange={(e) => handleEntradaDetailChange(index, 'cantidad', e.target.value)} className="w-24 px-2 py-2 border rounded-lg" required /></td><td className="px-2 py-2"><input type="number" min="0" step="0.01" value={detalle.costoUnitario} onChange={(e) => handleEntradaDetailChange(index, 'costoUnitario', e.target.value)} className="w-28 px-2 py-2 border rounded-lg" required /></td><td className="px-2 py-2"><input value={detalle.lote} onChange={(e) => handleEntradaDetailChange(index, 'lote', e.target.value)} className="w-24 px-2 py-2 border rounded-lg" /></td><td className="px-2 py-2"><input type="date" value={detalle.fechaVencimiento} onChange={(e) => handleEntradaDetailChange(index, 'fechaVencimiento', e.target.value)} className="w-32 px-2 py-2 border rounded-lg" /></td><td className="px-2 py-2 font-semibold">Q{totalLinea.toFixed(2)}</td><td><button type="button" onClick={() => setEntradaForm((previous) => ({ ...previous, detalles: previous.detalles.filter((_, detailIndex) => detailIndex !== index) }))} disabled={entradaForm.detalles.length === 1} className="text-red-500 disabled:opacity-30" aria-label="Eliminar fila"><Trash2 size={17} /></button></td></tr>
+                      })}</tbody></table>
+                    <button type="button" onClick={() => setEntradaForm((previous) => ({ ...previous, detalles: [...previous.detalles, { productoId: '', unidad: 'unidad', cantidad: '', costoUnitario: '', lote: '', fechaVencimiento: '' }] }))} className="m-3 text-sm font-semibold text-cyan-700">+ Agregar producto</button>
+                    <div className="flex justify-end gap-8 border-t bg-gray-50 px-4 py-3 text-sm">
+                      <span>Subtotal: <strong>Q{entradaForm.detalles.reduce((sum, detalle) => sum + (Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)), 0).toFixed(2)}</strong></span>
+                      <span className="text-base">Total: <strong className="text-cyan-700">Q{entradaForm.detalles.reduce((sum, detalle) => sum + (Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)), 0).toFixed(2)}</strong></span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-sm font-semibold text-gray-700 mb-2">Observaciones</label><textarea rows="3" value={entradaForm.observaciones} onChange={(e) => setEntradaForm({ ...entradaForm, observaciones: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" /></div><div><label className="block text-sm font-semibold text-gray-700 mb-2">Documento adjunto</label><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setEntradaForm({ ...entradaForm, documento: e.target.files?.[0] || null })} className="w-full text-sm" /><p className="text-xs text-gray-500 mt-1">Se almacena de forma segura en Supabase Storage.</p></div></div>
+                  <div className="flex justify-end gap-3 border-t pt-4"><button type="button" onClick={handleCloseModal} className="px-5 py-2 rounded-lg bg-gray-200 text-gray-700">Cancelar</button><button type="button" onClick={(event) => handleSubmitEntrada(event, false)} disabled={isSavingMovimiento} className="px-5 py-2 rounded-lg bg-gray-500 text-white disabled:opacity-50">Guardar borrador</button><button type="submit" disabled={isSavingMovimiento} className="px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white disabled:opacity-50">{isSavingMovimiento ? 'Guardando...' : 'Confirmar entrada'}</button></div>
+                </form>
+              )}
+
+              {(modalType === 'salida' || modalType === 'merma') && (
                 <form className="space-y-4" onSubmit={handleSubmitMovimiento} noValidate>
                   {errorProducto && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
