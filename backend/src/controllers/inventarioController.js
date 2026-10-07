@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 import { parseListQuery } from '../utils/listQuery.js'
 
@@ -5,6 +6,28 @@ function buildErrorResponse(res, error, fallbackMessage, statusCode = 500) {
   return res.status(statusCode).json({
     message: error?.message || fallbackMessage,
   })
+}
+
+const ENTRADA_DOCUMENTOS_BUCKET = 'entrada-inventario-documentos'
+
+async function ensureEntradaDocumentosBucket() {
+  const { data: bucket, error: lookupError } = await supabaseAdmin.storage
+    .getBucket(ENTRADA_DOCUMENTOS_BUCKET)
+
+  if (bucket) return
+
+  const { error: createError } = await supabaseAdmin.storage.createBucket(
+    ENTRADA_DOCUMENTOS_BUCKET,
+    { public: false },
+  )
+
+  if (createError && !/already exists|duplicate/i.test(createError.message || '')) {
+    throw createError
+  }
+
+  if (lookupError && createError) {
+    throw createError
+  }
 }
 
 function parseOptionalNumber(value) {
@@ -547,9 +570,10 @@ export async function uploadEntradaInventarioDocumento(req, res) {
     if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
       return res.status(400).json({ message: 'El documento no puede superar 5 MB.' })
     }
+    await ensureEntradaDocumentosBucket()
     const path = `${new Date().getFullYear()}/entrada-${Date.now()}-${crypto.randomUUID()}.${normalizedExtension}`
     const { error } = await supabaseAdmin.storage
-      .from('entrada-inventario-documentos')
+      .from(ENTRADA_DOCUMENTOS_BUCKET)
       .upload(path, buffer, { upsert: false, contentType: tipo })
     if (error) return buildErrorResponse(res, error, 'No fue posible cargar el documento.', 400)
     return res.status(201).json({ data: { path } })
