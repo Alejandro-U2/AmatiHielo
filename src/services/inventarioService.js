@@ -1,6 +1,6 @@
 import { getAccessToken } from './authService'
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '')
 
 function formatDateTime(value) {
   if (!value) return 'Sin registro'
@@ -107,9 +107,22 @@ function normalizeMovimiento(row) {
     fecha: formatDateTime(createdAt),
     tipo: row.tipo,
     producto: row.producto?.nombre || row.producto_nombre || row.producto || 'Producto',
+    proveedor: row.proveedor?.nombre || row.proveedor_nombre || '',
     cantidad: Number(row.cantidad || 0),
     usuario: row.usuario || 'Sistema',
     motivo: row.motivo || 'Sin motivo',
+  }
+}
+
+function normalizeProveedor(row) {
+  return {
+    id: row.id,
+    codigo: row.codigo || '',
+    nombre: row.nombre || '',
+    nit: row.nit || '',
+    telefono: row.telefono || '',
+    correo: row.correo || '',
+    activo: Boolean(row.activo ?? true),
   }
 }
 
@@ -139,6 +152,33 @@ export async function listTiposMovimiento() {
 export async function listMovimientosInventario() {
   const payload = await request('/api/inventario/movimiento')
   return (payload?.data || []).map(normalizeMovimiento)
+}
+
+export async function listProveedoresInventario() {
+  const payload = await request('/api/inventario/proveedor')
+  return (payload?.data || []).map(normalizeProveedor)
+}
+
+export async function createProveedorInventario(input) {
+  const payload = await request('/api/inventario/proveedor', {
+    method: 'POST',
+    body: input,
+  })
+  return normalizeProveedor(payload?.data || {})
+}
+
+export async function updateProveedorInventario(id, input) {
+  const payload = await request(`/api/inventario/proveedor/${id}`, {
+    method: 'PUT',
+    body: input,
+  })
+  return normalizeProveedor(payload?.data || {})
+}
+
+export async function deleteProveedorInventario(id) {
+  await request(`/api/inventario/proveedor/${id}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function createMovimientoInventario(input) {

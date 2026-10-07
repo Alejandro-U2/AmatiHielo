@@ -23,7 +23,11 @@ import {
   listCategoriasInventario,
   listMovimientosInventario,
   listProductosInventario,
+  listProveedoresInventario,
   listTiposMovimiento,
+  createProveedorInventario,
+  updateProveedorInventario,
+  deleteProveedorInventario,
   updateProductoInventario,
 } from '../../services/inventarioService'
 import Pagination from '../../components/Pagination'
@@ -64,6 +68,9 @@ function Inventarios() {
   const [tiposMovimiento, setTiposMovimiento] = useState(DEFAULT_TIPOS_MOVIMIENTO)
   const [productos, setProductos] = useState([])
   const [movimientos, setMovimientos] = useState([])
+  const [proveedores, setProveedores] = useState([])
+  const [isSavingProveedor, setIsSavingProveedor] = useState(false)
+  const [proveedorError, setProveedorError] = useState('')
   const [isSavingProducto, setIsSavingProducto] = useState(false)
   const [isSavingMovimiento, setIsSavingMovimiento] = useState(false)
   const [errorProducto, setErrorProducto] = useState('')
@@ -73,8 +80,15 @@ function Inventarios() {
   const [isLoading, setIsLoading] = useState(true)
   const [movimientoForm, setMovimientoForm] = useState({
     productoId: '',
+    proveedorId: '',
     cantidad: '',
     motivo: '',
+  })
+  const [proveedorForm, setProveedorForm] = useState({
+    nombre: '',
+    nit: '',
+    telefono: '',
+    correo: '',
   })
   const [productoForm, setProductoForm] = useState({
     codigo: '',
@@ -105,7 +119,7 @@ function Inventarios() {
     )
   })
 
-  const filteredMovimientos = movimientos.filter((mov) => {
+  const filteredMovimientos = (Array.isArray(movimientos) ? movimientos : []).filter((mov) => {
     const matchTipo = filterTipoMov === 'todos' || mov.tipo === filterTipoMov
     const normalizedSearch = movSearchTerm.trim().toLowerCase()
     const matchSearch = !normalizedSearch
@@ -243,14 +257,29 @@ function Inventarios() {
 
   const loadMovimientos = async () => {
     const movimientosData = await listMovimientosInventario()
-    setMovimientos(movimientosData)
+    setMovimientos(Array.isArray(movimientosData) ? movimientosData : [])
+  }
+
+  const loadProveedores = async () => {
+    const proveedoresData = await listProveedoresInventario()
+    setProveedores(Array.isArray(proveedoresData) ? proveedoresData : [])
   }
 
   const resetMovimientoForm = (item = null) => {
     setMovimientoForm({
       productoId: item?.id ? String(item.id) : '',
+      proveedorId: '',
       cantidad: '',
       motivo: '',
+    })
+  }
+
+  const resetProveedorForm = (item = null) => {
+    setProveedorForm({
+      nombre: item?.nombre || '',
+      nit: item?.nit || '',
+      telefono: item?.telefono || '',
+      correo: item?.correo || '',
     })
   }
 
@@ -261,9 +290,10 @@ function Inventarios() {
       try {
         setErrorCarga('')
         setIsLoading(true)
-        const [productosData, movimientosData] = await Promise.all([
+        const [productosData, movimientosData, proveedoresData] = await Promise.all([
           listProductosInventario(),
           listMovimientosInventario(),
+          listProveedoresInventario(),
         ])
 
         if (cancelled) {
@@ -271,11 +301,13 @@ function Inventarios() {
         }
 
         setProductos(productosData)
-        setMovimientos(movimientosData)
+        setMovimientos(Array.isArray(movimientosData) ? movimientosData : [])
+        setProveedores(Array.isArray(proveedoresData) ? proveedoresData : [])
       } catch (error) {
         if (!cancelled) {
           setProductos([])
           setMovimientos([])
+          setProveedores([])
           setErrorCarga(error.message || 'No fue posible cargar inventario.')
         }
       } finally {
@@ -409,6 +441,14 @@ function Inventarios() {
       fillProductoForm(item)
     }
 
+    if (type === 'provider-add') {
+      resetProveedorForm()
+    }
+
+    if (type === 'provider-edit' || type === 'provider-view') {
+      resetProveedorForm(item)
+    }
+
     if (type === 'entrada' || type === 'salida' || type === 'merma') {
       resetMovimientoForm(item)
     }
@@ -421,6 +461,7 @@ function Inventarios() {
     setSelectedItem(null)
     setModalType('')
     setErrorProducto('')
+    setProveedorError('')
     resetMovimientoForm()
   }
 
@@ -447,6 +488,17 @@ function Inventarios() {
   const handleSubmitProducto = async (event) => {
     event.preventDefault()
     setErrorProducto('')
+
+    if (!productoForm.categoria.trim()) {
+      setErrorProducto('Campo vacío: Categoría.')
+      return
+    }
+
+    if (!productoForm.nombre.trim()) {
+      setErrorProducto('Campo vacío: Nombre del Producto.')
+      return
+    }
+
     setIsSavingProducto(true)
 
     try {
@@ -522,6 +574,7 @@ function Inventarios() {
 
       const payload = {
         productoId: Number(movimientoForm.productoId || 0),
+        proveedorId: modalType === 'entrada' ? Number(movimientoForm.proveedorId || 0) || null : null,
         tipo,
         cantidad,
         motivo: movimientoForm.motivo,
@@ -535,6 +588,53 @@ function Inventarios() {
       setErrorProducto(error.message || 'No fue posible registrar el movimiento.')
     } finally {
       setIsSavingMovimiento(false)
+    }
+  }
+
+  const handleSubmitProveedor = async (event) => {
+      event.preventDefault()
+      setProveedorError('')
+
+      if (!proveedorForm.nombre.trim()) {
+        setProveedorError('El nombre del proveedor es obligatorio.')
+        return
+      }
+
+      if (proveedorForm.nit && !/^[a-zA-Z0-9]{1,13}$/.test(proveedorForm.nit)) {
+        setProveedorError('El NIT debe contener únicamente letras y números, con un máximo de 13 caracteres.')
+        return
+      }
+
+      if (proveedorForm.telefono && !/^\d{1,8}$/.test(proveedorForm.telefono)) {
+        setProveedorError('El teléfono debe contener únicamente números, con un máximo de 8 dígitos.')
+        return
+      }
+
+      setIsSavingProveedor(true)
+      try {
+        if (modalType === 'provider-add') {
+          await createProveedorInventario(proveedorForm)
+        } else {
+          await updateProveedorInventario(selectedItem.id, proveedorForm)
+        }
+        await loadProveedores()
+        handleCloseModal()
+        toast.success(modalType === 'provider-add' ? 'Proveedor creado correctamente.' : 'Proveedor actualizado correctamente.')
+      } catch (error) {
+        setProveedorError(error.message || 'No fue posible guardar el proveedor.')
+      } finally {
+        setIsSavingProveedor(false)
+      }
+    }
+
+  const handleDeleteProveedor = async (item) => {
+      if (!item?.id) return
+      try {
+        await deleteProveedorInventario(item.id)
+        await loadProveedores()
+        toast.success('Proveedor desactivado correctamente.')
+      } catch (error) {
+        toast.error(error.message || 'No fue posible desactivar el proveedor.')
     }
   }
 
@@ -582,6 +682,17 @@ function Inventarios() {
           >
             <ClipboardList size={18} aria-hidden="true" />
             Movimientos de Bodega
+          </button>
+          <button
+            onClick={() => setActiveTab('proveedores')}
+            className={`px-6 py-4 font-semibold transition-colors ${
+              activeTab === 'proveedores'
+                ? 'border-b-4 border-cyan-500 text-cyan-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            <ClipboardList size={18} aria-hidden="true" />
+            Proveedores
           </button>
           <button
             onClick={() => setActiveTab('alertas')}
@@ -907,6 +1018,7 @@ function Inventarios() {
                   Limpiar filtros
                 </button>
               )}
+
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -960,6 +1072,71 @@ function Inventarios() {
             />
           </div>
         </>
+      )}
+
+      {/* Contenido del Tab - Proveedores */}
+      {activeTab === 'proveedores' && (
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-2xl font-bold text-gray-800">Proveedores</h3>
+              <p className="text-sm text-gray-600 mt-1">Registra a quién se compra para seleccionar el proveedor en cada Entrada.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleOpenModal('provider-add')}
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-5 py-3 rounded-lg shadow-md font-medium"
+            >
+              <Plus size={18} aria-hidden="true" />
+              Nuevo proveedor
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Código</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Proveedor</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase">Teléfono</th>
+                  <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase">Estado</th>
+                  <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {proveedores.map((proveedor) => (
+                  <tr key={proveedor.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 font-mono text-sm text-gray-700">{proveedor.codigo}</td>
+                    <td className="px-6 py-4">
+                      <p className="font-semibold text-gray-800">{proveedor.nombre}</p>
+                      {proveedor.nit && <p className="text-xs text-gray-500">NIT: {proveedor.nit}</p>}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{proveedor.telefono || '-'}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${proveedor.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {proveedor.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button type="button" onClick={() => handleOpenModal('provider-edit', proveedor)} className="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors" title="Editar">
+                          <Pencil size={16} aria-hidden="true" />
+                        </button>
+                        {proveedor.activo && (
+                          <button type="button" onClick={() => handleDeleteProveedor(proveedor)} className="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors" title="Desactivar">
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {proveedores.length === 0 && (
+                  <tr><td colSpan="5" className="px-6 py-10 text-center text-sm text-gray-500">No hay proveedores registrados.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Contenido del Tab - Alertas */}
@@ -1057,14 +1234,59 @@ function Inventarios() {
                   {modalType === 'entrada' && 'Registro de Entrada'}
                   {modalType === 'salida' && 'Registro de Salida'}
                   {modalType === 'merma' && 'Gestión de Mermas'}
+                  {modalType === 'provider-add' && 'Nuevo Proveedor'}
+                  {modalType === 'provider-edit' && 'Editar Proveedor'}
                 </h3>
                 <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600" title="Cerrar" aria-label="Cerrar">
                   <X size={22} aria-hidden="true" />
                 </button>
               </div>
 
+              {(modalType === 'provider-add' || modalType === 'provider-edit') && (
+                <form className="space-y-4" onSubmit={handleSubmitProveedor} noValidate>
+                  {proveedorError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{proveedorError}</div>}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      ['nombre', 'Nombre o razón social', 'Nombre del proveedor'],
+                      ['nit', 'NIT', '000000-0'],
+                      ['telefono', 'Teléfono', '5555-5555'],
+                      ['correo', 'Correo electrónico', 'correo@ejemplo.com'],
+                    ].map(([field, label, placeholder]) => (
+                      <div key={field}>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">{label}{(field === 'codigo' || field === 'nombre') && ' *'}</label>
+                        <input
+                          type={field === 'correo' ? 'email' : 'text'}
+                          value={proveedorForm[field]}
+                          onChange={(event) => {
+                            const rawValue = event.target.value
+                            const value = field === 'nit'
+                              ? rawValue.replace(/[^a-zA-Z0-9]/g, '').slice(0, 13)
+                              : field === 'telefono'
+                                ? rawValue.replace(/\D/g, '').slice(0, 8)
+                                : rawValue
+                            setProveedorForm((previous) => ({ ...previous, [field]: value }))
+                            setProveedorError('')
+                          }}
+                          placeholder={placeholder}
+                          maxLength={field === 'nit' ? 13 : field === 'telefono' ? 8 : undefined}
+                          inputMode={field === 'telefono' ? 'numeric' : field === 'nit' ? 'text' : undefined}
+                          className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                          required={field === 'nombre'}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex space-x-3 pt-4">
+                    <button type="button" onClick={handleCloseModal} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium">Cancelar</button>
+                    <button type="submit" disabled={isSavingProveedor} className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg font-medium disabled:opacity-50">
+                      {isSavingProveedor ? 'Guardando...' : 'Guardar Proveedor'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {(modalType === 'add' || modalType === 'edit' || modalType === 'view') && (
-                <form className="space-y-4" onSubmit={handleSubmitProducto}>
+                <form className="space-y-4" onSubmit={handleSubmitProducto} noValidate>
                   {errorProducto && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                       {errorProducto}
@@ -1194,7 +1416,7 @@ function Inventarios() {
               )}
 
               {(modalType === 'entrada' || modalType === 'salida' || modalType === 'merma') && (
-                <form className="space-y-4" onSubmit={handleSubmitMovimiento}>
+                <form className="space-y-4" onSubmit={handleSubmitMovimiento} noValidate>
                   {errorProducto && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                       {errorProducto}
@@ -1214,6 +1436,25 @@ function Inventarios() {
                       ))}
                     </select>
                   </div>
+                  {modalType === 'entrada' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Proveedor</label>
+                      <select
+                        value={movimientoForm.proveedorId}
+                        onChange={(e) => handleMovimientoFormChange('proveedorId', e.target.value)}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        required
+                      >
+                        <option value="">Seleccionar proveedor...</option>
+                        {proveedores.filter((proveedor) => proveedor.activo).map((proveedor) => (
+                          <option key={proveedor.id} value={proveedor.id}>{proveedor.codigo} - {proveedor.nombre}</option>
+                        ))}
+                      </select>
+                      {proveedores.filter((proveedor) => proveedor.activo).length === 0 && (
+                        <p className="mt-1 text-xs text-amber-600">Registra un proveedor antes de crear una Entrada.</p>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Cantidad</label>
