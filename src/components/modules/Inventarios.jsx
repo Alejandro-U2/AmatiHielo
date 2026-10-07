@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownToLine,
-  ArrowUpFromLine,
   Bell,
   CheckCircle,
   Eye,
@@ -45,7 +44,7 @@ const DEFAULT_CATEGORIAS = [
   { nombre: 'Suministros', codigo: 'SUM' },
 ]
 
-const DEFAULT_TIPOS_MOVIMIENTO = ['Entrada', 'Salida', 'Merma', 'Ajuste']
+const DEFAULT_TIPOS_MOVIMIENTO = ['Entrada', 'Merma', 'Ajuste']
 
 function Inventarios() {
   const [activeTab, setActiveTab] = useState('catalogo')
@@ -259,7 +258,7 @@ function Inventarios() {
     try {
       const tiposData = await listTiposMovimiento()
       if (tiposData.length > 0) {
-        setTiposMovimiento(tiposData.map((tipo) => tipo.nombre))
+        setTiposMovimiento(tiposData.map((tipo) => tipo.nombre).filter((tipo) => tipo !== 'Salida'))
       }
     } catch {
       setTiposMovimiento(DEFAULT_TIPOS_MOVIMIENTO)
@@ -474,10 +473,6 @@ function Inventarios() {
       resetProveedorForm(item)
     }
 
-    if (type === 'entrada') {
-      resetEntradaForm(item)
-    }
-
     if (type === 'salida' || type === 'merma') {
       resetMovimientoForm(item)
     }
@@ -589,7 +584,9 @@ function Inventarios() {
         if (field === 'productoId') {
           const producto = productos.find((item) => String(item.id) === String(value))
           updated.unidad = producto?.unidad || 'unidad'
-          if (!updated.costoUnitario) updated.costoUnitario = String(producto?.precio_compra ?? producto?.costo_unitario ?? '')
+          updated.costoUnitario = producto
+            ? String(producto.precio_compra ?? producto.costo_unitario ?? '')
+            : ''
         }
         return updated
       }),
@@ -1008,20 +1005,13 @@ function Inventarios() {
         <>
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h3 className="text-2xl font-bold text-gray-800 mb-4">Movimientos de Bodega</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <button
                 onClick={() => handleOpenModal('entrada')}
                 className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl hover:from-green-100 hover:to-green-200 transition-all text-center border-2 border-green-200"
               >
                 <ArrowDownToLine size={32} aria-hidden="true" className="mx-auto mb-2" />
                 <p className="font-semibold text-gray-800">Registro de Entrada</p>
-              </button>
-              <button
-                onClick={() => handleOpenModal('salida')}
-                className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-xl hover:from-red-100 hover:to-red-200 transition-all text-center border-2 border-red-200"
-              >
-                <ArrowUpFromLine size={32} aria-hidden="true" className="mx-auto mb-2" />
-                <p className="font-semibold text-gray-800">Registro de Salida</p>
               </button>
               <button
                 onClick={() => handleOpenModal('merma')}
@@ -1104,6 +1094,7 @@ function Inventarios() {
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Cantidad" sortKey="cantidad" sortBy={movSort.sortBy} sortDir={movSort.sortDir} onSort={movSort.toggle} align="right" className="text-gray-700" /></th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Usuario" sortKey="usuario" sortBy={movSort.sortBy} sortDir={movSort.sortDir} onSort={movSort.toggle} className="text-gray-700" /></th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Motivo</th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -1124,11 +1115,24 @@ function Inventarios() {
                       <td className="px-6 py-4 text-right font-semibold">{mov.cantidad}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{mov.usuario}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{mov.motivo}</td>
+                      <td className="px-6 py-4 text-center">
+                        {(mov.tipo === 'Entrada' || mov.tipo === 'Merma') && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenModal('movement-view', mov)}
+                            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-50"
+                            title={`Ver detalle de ${mov.tipo.toLowerCase()}`}
+                          >
+                            <Eye size={16} aria-hidden="true" />
+                            Ver
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {movimientos.length === 0 && (
                     <tr>
-                      <td colSpan="6" className="px-6 py-10 text-center text-sm text-gray-500">
+                      <td colSpan="7" className="px-6 py-10 text-center text-sm text-gray-500">
                         No hay movimientos registrados.
                       </td>
                     </tr>
@@ -1306,8 +1310,8 @@ function Inventarios() {
                   {modalType === 'edit' && 'Editar Artículo'}
                   {modalType === 'view' && 'Ver Artículo'}
                   {modalType === 'entrada' && 'Registro de Entrada'}
-                  {modalType === 'salida' && 'Registro de Salida'}
                   {modalType === 'merma' && 'Gestión de Mermas'}
+                  {modalType === 'movement-view' && `Detalle de ${selectedItem?.tipo || 'Movimiento'}`}
                   {modalType === 'provider-add' && 'Nuevo Proveedor'}
                   {modalType === 'provider-edit' && 'Editar Proveedor'}
                 </h3>
@@ -1315,6 +1319,26 @@ function Inventarios() {
                   <X size={22} aria-hidden="true" />
                 </button>
               </div>
+
+              {modalType === 'movement-view' && selectedItem && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Fecha</span><p className="mt-1 text-gray-800">{selectedItem.fecha}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Tipo</span><p className="mt-1 font-semibold text-gray-800">{selectedItem.tipo}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Producto</span><p className="mt-1 text-gray-800">{selectedItem.producto}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Cantidad</span><p className="mt-1 font-semibold text-gray-800">{selectedItem.cantidad}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Proveedor</span><p className="mt-1 text-gray-800">{selectedItem.proveedor || 'No aplica'}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Usuario</span><p className="mt-1 text-gray-800">{selectedItem.usuario}</p></div>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase text-gray-500">Motivo / Observaciones</span>
+                    <p className="mt-2 whitespace-pre-wrap rounded-lg border border-gray-200 p-3 text-sm text-gray-700">{selectedItem.motivo || 'Sin observaciones'}</p>
+                  </div>
+                  <button type="button" onClick={handleCloseModal} className="w-full rounded-lg bg-gray-200 py-3 font-medium text-gray-700 hover:bg-gray-300">Cerrar</button>
+                </div>
+              )}
 
               {(modalType === 'provider-add' || modalType === 'provider-edit') && (
                 <form className="space-y-4" onSubmit={handleSubmitProveedor} noValidate>
