@@ -45,6 +45,7 @@ const DEFAULT_CATEGORIAS = [
 ]
 
 const DEFAULT_TIPOS_MOVIMIENTO = ['Entrada', 'Merma', 'Ajuste']
+const MOTIVOS_MERMA = ['Producto derretido', 'Producto dañado', 'Producto vencido', 'Pérdida durante traslado', 'Contaminación', 'Error de producción', 'Ajuste de inventario', 'Otro']
 
 function Inventarios() {
   const [activeTab, setActiveTab] = useState('catalogo')
@@ -93,6 +94,11 @@ function Inventarios() {
     observaciones: '',
     documento: null,
     detalles: [],
+  })
+  const [mermaForm, setMermaForm] = useState({
+    fecha: new Date().toISOString().slice(0, 10),
+    motivoTipo: '',
+    evidencia: null,
   })
   const [proveedorForm, setProveedorForm] = useState({
     nombre: '',
@@ -476,6 +482,9 @@ function Inventarios() {
     if (type === 'salida' || type === 'merma') {
       resetMovimientoForm(item)
     }
+    if (type === 'merma') {
+      setMermaForm({ fecha: new Date().toISOString().slice(0, 10), motivoTipo: '', evidencia: null })
+    }
 
     if (type === 'entrada') {
       resetEntradaForm(item)
@@ -492,6 +501,7 @@ function Inventarios() {
     setProveedorError('')
     resetMovimientoForm()
     resetEntradaForm()
+    setMermaForm({ fecha: new Date().toISOString().slice(0, 10), motivoTipo: '', evidencia: null })
   }
 
   const handleProductoFormChange = (field, value) => {
@@ -649,6 +659,16 @@ function Inventarios() {
         tipo,
         cantidad,
         motivo: movimientoForm.motivo,
+      }
+
+      if (modalType === 'merma') {
+        if (!mermaForm.motivoTipo) throw new Error('Selecciona el motivo de la merma.')
+        if (!mermaForm.evidencia && mermaForm.motivoTipo === 'Otro' && !movimientoForm.motivo.trim()) {
+          throw new Error('Describe la merma en las observaciones.')
+        }
+        payload.motivoTipo = mermaForm.motivoTipo
+        payload.fecha = mermaForm.fecha
+        payload.documentoPath = await uploadEntradaInventarioDocumento(mermaForm.evidencia)
       }
 
       await createMovimientoInventario(payload)
@@ -1092,6 +1112,8 @@ function Inventarios() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Tipo" sortKey="tipo" sortBy={movSort.sortBy} sortDir={movSort.sortDir} onSort={movSort.toggle} className="text-gray-700" /></th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Producto" sortKey="producto" sortBy={movSort.sortBy} sortDir={movSort.sortDir} onSort={movSort.toggle} className="text-gray-700" /></th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Cantidad" sortKey="cantidad" sortBy={movSort.sortBy} sortDir={movSort.sortDir} onSort={movSort.toggle} align="right" className="text-gray-700" /></th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase">Pérdida</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase">Stock final</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Usuario" sortKey="usuario" sortBy={movSort.sortBy} sortDir={movSort.sortDir} onSort={movSort.toggle} className="text-gray-700" /></th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Motivo</th>
                     <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase">Acciones</th>
@@ -1113,6 +1135,8 @@ function Inventarios() {
                       </td>
                       <td className="px-6 py-4 font-medium text-gray-800">{mov.producto}</td>
                       <td className="px-6 py-4 text-right font-semibold">{mov.cantidad}</td>
+                      <td className="px-6 py-4 text-right text-sm">{mov.tipo === 'Merma' ? `Q${mov.perdidaEconomica.toFixed(2)}` : '—'}</td>
+                      <td className="px-6 py-4 text-right text-sm">{mov.stockDespues ?? '—'}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{mov.usuario}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{mov.motivo}</td>
                       <td className="px-6 py-4 text-center">
@@ -1132,7 +1156,7 @@ function Inventarios() {
                   ))}
                   {movimientos.length === 0 && (
                     <tr>
-                      <td colSpan="7" className="px-6 py-10 text-center text-sm text-gray-500">
+                      <td colSpan="9" className="px-6 py-10 text-center text-sm text-gray-500">
                         No hay movimientos registrados.
                       </td>
                     </tr>
@@ -1330,6 +1354,9 @@ function Inventarios() {
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Cantidad</span><p className="mt-1 font-semibold text-gray-800">{selectedItem.cantidad}</p></div>
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Proveedor</span><p className="mt-1 text-gray-800">{selectedItem.proveedor || 'No aplica'}</p></div>
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Usuario</span><p className="mt-1 text-gray-800">{selectedItem.usuario}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Costo unitario</span><p className="mt-1 text-gray-800">Q{selectedItem.costoUnitario.toFixed(2)}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Pérdida económica</span><p className="mt-1 font-semibold text-orange-600">Q{selectedItem.perdidaEconomica.toFixed(2)}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Stock</span><p className="mt-1 text-gray-800">{selectedItem.stockAntes ?? '—'} → {selectedItem.stockDespues ?? '—'}</p></div>
                     </div>
                   </div>
                   <div>
@@ -1561,6 +1588,10 @@ function Inventarios() {
                       {errorProducto}
                     </div>
                   )}
+                  {modalType === 'merma' && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Motivo *</label><select value={mermaForm.motivoTipo} onChange={(event) => setMermaForm((previous) => ({ ...previous, motivoTipo: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required><option value="">Seleccionar motivo...</option>{MOTIVOS_MERMA.map((motivo) => <option key={motivo} value={motivo}>{motivo}</option>)}</select></div>
+                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Fecha de la merma *</label><input type="date" value={mermaForm.fecha} onChange={(event) => setMermaForm((previous) => ({ ...previous, fecha: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required /></div>
+                  </div>}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Producto</label>
                     <select
@@ -1636,6 +1667,7 @@ function Inventarios() {
                       </p>
                     </div>
                   )}
+                  {modalType === 'merma' && <div><label className="block text-sm font-semibold text-gray-700 mb-2">Evidencia opcional</label><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setMermaForm((previous) => ({ ...previous, evidencia: event.target.files?.[0] || null }))} className="w-full text-sm" /><p className="text-xs text-gray-500 mt-1">PDF, JPG o PNG de hasta 5 MB.</p></div>}
                   <div className="flex space-x-3 pt-4">
                     <button
                       type="button"

@@ -112,6 +112,12 @@ function normalizeMovimiento(row) {
     usuario: row.usuario || 'Sistema',
     motivo: row.motivo || 'Sin motivo',
     documentoUrl: row.documento_url || row.documentoUrl || '',
+    motivoTipo: row.motivo_tipo || row.motivoTipo || '',
+    fechaMovimiento: row.fecha_movimiento || row.fechaMovimiento || row.created_at,
+    costoUnitario: Number(row.costo_unitario_movimiento ?? row.costo_unitario ?? 0),
+    perdidaEconomica: Number(row.perdida_economica ?? 0),
+    stockAntes: row.stock_antes === null || row.stock_antes === undefined ? null : Number(row.stock_antes),
+    stockDespues: row.stock_despues === null || row.stock_despues === undefined ? null : Number(row.stock_despues),
   }
 }
 
