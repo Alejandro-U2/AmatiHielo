@@ -26,6 +26,7 @@ import {
   listProductosInventario,
   listProveedoresInventario,
   listTiposMovimiento,
+  listMotivosMerma,
   createProveedorInventario,
   updateProveedorInventario,
   deleteProveedorInventario,
@@ -45,7 +46,6 @@ const DEFAULT_CATEGORIAS = [
 ]
 
 const DEFAULT_TIPOS_MOVIMIENTO = ['Entrada', 'Merma', 'Ajuste']
-const MOTIVOS_MERMA = ['Producto derretido', 'Producto dañado', 'Producto vencido', 'Pérdida durante traslado', 'Contaminación', 'Error de producción', 'Ajuste de inventario', 'Otro']
 
 function Inventarios() {
   const [activeTab, setActiveTab] = useState('catalogo')
@@ -68,6 +68,7 @@ function Inventarios() {
   const [generandoReporte, setGenerandoReporte] = useState(false)
   const [categoriasInventario, setCategoriasInventario] = useState(DEFAULT_CATEGORIAS)
   const [tiposMovimiento, setTiposMovimiento] = useState(DEFAULT_TIPOS_MOVIMIENTO)
+  const [motivosMerma, setMotivosMerma] = useState([])
   const [productos, setProductos] = useState([])
   const [movimientos, setMovimientos] = useState([])
   const [proveedores, setProveedores] = useState([])
@@ -281,6 +282,11 @@ function Inventarios() {
     setProveedores(Array.isArray(proveedoresData) ? proveedoresData : [])
   }
 
+  const loadMotivosMerma = async () => {
+    const motivos = await listMotivosMerma()
+    setMotivosMerma(Array.isArray(motivos) ? motivos : [])
+  }
+
   const resetMovimientoForm = (item = null) => {
     setMovimientoForm({
       productoId: item?.id ? String(item.id) : '',
@@ -350,6 +356,7 @@ function Inventarios() {
     cargarInventario()
     loadCategorias()
     loadTiposMovimiento()
+    loadMotivosMerma().catch(() => setMotivosMerma([]))
 
     return () => {
       cancelled = true
@@ -663,10 +670,11 @@ function Inventarios() {
 
       if (modalType === 'merma') {
         if (!mermaForm.motivoTipo) throw new Error('Selecciona el motivo de la merma.')
-        if (!mermaForm.evidencia && mermaForm.motivoTipo === 'Otro' && !movimientoForm.motivo.trim()) {
+        if (!mermaForm.evidencia && motivosMerma.find((motivo) => String(motivo.id) === String(mermaForm.motivoTipo))?.codigo === 'OTRO' && !movimientoForm.motivo.trim()) {
           throw new Error('Describe la merma en las observaciones.')
         }
-        payload.motivoTipo = mermaForm.motivoTipo
+        payload.motivoTipo = motivosMerma.find((motivo) => String(motivo.id) === String(mermaForm.motivoTipo))?.nombre || ''
+        payload.motivoMermaId = Number(mermaForm.motivoTipo)
         payload.fecha = mermaForm.fecha
         payload.documentoPath = await uploadEntradaInventarioDocumento(mermaForm.evidencia)
       }
@@ -1589,7 +1597,7 @@ function Inventarios() {
                     </div>
                   )}
                   {modalType === 'merma' && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Motivo *</label><select value={mermaForm.motivoTipo} onChange={(event) => setMermaForm((previous) => ({ ...previous, motivoTipo: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required><option value="">Seleccionar motivo...</option>{MOTIVOS_MERMA.map((motivo) => <option key={motivo} value={motivo}>{motivo}</option>)}</select></div>
+                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Motivo *</label><select value={mermaForm.motivoTipo} onChange={(event) => setMermaForm((previous) => ({ ...previous, motivoTipo: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required><option value="">Seleccionar motivo...</option>{motivosMerma.map((motivo) => <option key={motivo.id} value={motivo.id}>{motivo.nombre}</option>)}</select></div>
                     <div><label className="block text-sm font-semibold text-gray-700 mb-2">Fecha de la merma *</label><input type="date" value={mermaForm.fecha} onChange={(event) => setMermaForm((previous) => ({ ...previous, fecha: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required /></div>
                   </div>}
                   <div>

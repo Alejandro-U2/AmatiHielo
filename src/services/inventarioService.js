@@ -156,6 +156,16 @@ export async function listTiposMovimiento() {
   }))
 }
 
+export async function listMotivosMerma() {
+  const payload = await request('/api/inventario/motivos-merma')
+  return (payload?.data || []).map((row) => ({
+    id: row.id,
+    codigo: row.codigo,
+    nombre: row.nombre,
+    descripcion: row.descripcion || '',
+  }))
+}
+
 export async function listMovimientosInventario() {
   const payload = await request('/api/inventario/movimiento')
   return (payload?.data || []).map(normalizeMovimiento)
