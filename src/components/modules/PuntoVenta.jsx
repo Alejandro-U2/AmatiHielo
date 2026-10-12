@@ -9,14 +9,38 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getRecetas } from '../../services/recetasService'
-import { createVentaPos, listClientesPos, listMetodosPago, listVentasPos } from '../../services/posService'
+import {
+  createClientePos,
+  createVentaPos,
+  listClientesPos,
+  listMetodosPago,
+  listVentasPos,
+  updateClientePos,
+} from '../../services/posService'
 import { getParametrosSistema } from '../../services/configuracionSistemaService'
+import { confirmarArqueoCaja, getArqueoCaja } from '../../services/cajaService'
 import { isValidNombreCliente, isValidTelefono, isValidNIT, sanitizeNombreCliente, sanitizeTelefono, sanitizeNIT, capitalizeWords } from '../../utils/validation'
 import Pagination from '../../components/Pagination'
 import SortableHeader from '../../components/SortableHeader'
 import ReporteModal from '../../components/ReporteModal'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
+
+function getLatestSundayBoundary(referenceDate = new Date()) {
+  const boundary = new Date(referenceDate)
+  boundary.setHours(18, 0, 0, 0)
+  const daysSinceSunday = boundary.getDay()
+  boundary.setDate(boundary.getDate() - daysSinceSunday)
+  if (referenceDate < boundary) boundary.setDate(boundary.getDate() - 7)
+  return boundary
+}
+
+function getArqueoPeriod(referenceDate = new Date()) {
+  const periodoFin = getLatestSundayBoundary(referenceDate)
+  const periodoInicio = new Date(periodoFin)
+  periodoInicio.setDate(periodoInicio.getDate() - 7)
+  return { periodoInicio, periodoFin }
+}
 
 function PuntoVenta() {
   const [activeTab, setActiveTab] = useState('venta')
@@ -144,6 +168,10 @@ function PuntoVenta() {
   const [selectedVenta, setSelectedVenta] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [arqueoResumen, setArqueoResumen] = useState(null)
+  const [arqueoConfirmado, setArqueoConfirmado] = useState(false)
+  const [arqueoPeriodo, setArqueoPeriodo] = useState(() => getArqueoPeriod())
+  const [isConfirmingArqueo, setIsConfirmingArqueo] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [metodoPago, setMetodoPago] = useState('Efectivo')
@@ -158,6 +186,15 @@ function PuntoVenta() {
   })
   const [clientes, setClientes] = useState([])
   const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState('')
+  const [clienteEnEdicion, setClienteEnEdicion] = useState(null)
+  const [clienteForm, setClienteForm] = useState({
+    nombre: '',
+    nit: '',
+    telefono: '',
+    correo: '',
+    direccion: '',
+  })
+  const [isSavingCliente, setIsSavingCliente] = useState(false)
 
   const loadData = async () => {
     try {
@@ -202,16 +239,50 @@ function PuntoVenta() {
     loadData()
   }, [])
 
+  const cargarArqueo = async () => {
+    const periodo = getArqueoPeriod()
+    try {
+      const resultado = await getArqueoCaja(periodo.periodoInicio, periodo.periodoFin)
+      setArqueoPeriodo(periodo)
+      setArqueoResumen(resultado.data)
+      setArqueoConfirmado(resultado.confirmado)
+    } catch (error) {
+      setErrorMsg(error.message || 'No fue posible cargar el arqueo de caja.')
+    }
+  }
+
+  useEffect(() => {
+    cargarArqueo()
+  }, [])
+
   const categorias = useMemo(
     () => ['todos', ...new Set(productos.map((producto) => producto.categoria).filter(Boolean))],
     [productos],
   )
 
+  const ventasDelDia = useMemo(() => {
+    const hoy = new Date()
+    return ventas.filter((venta) => {
+      if (!venta.createdAt) return false
+      const fechaVenta = new Date(venta.createdAt)
+      return !Number.isNaN(fechaVenta.getTime())
+        && fechaVenta.getFullYear() === hoy.getFullYear()
+        && fechaVenta.getMonth() === hoy.getMonth()
+        && fechaVenta.getDate() === hoy.getDate()
+    })
+  }, [ventas])
+
   const arqueoCaja = useMemo(() => {
-    const totalVentas = ventas.reduce((sum, venta) => sum + venta.total, 0)
+    const totalVentas = arqueoResumen?.totalVentas ?? ventasDelDia.reduce((sum, venta) => sum + venta.total, 0)
     const porMetodo = metodosPago.map((nombre) => ({
       nombre,
-      total: ventas
+      total: arqueoResumen
+        ? nombre === 'Efectivo'
+          ? arqueoResumen.totalEfectivo
+          : nombre === 'Transferencia'
+            ? arqueoResumen.totalTransferencia
+            : 0
+        : ventasDelDia
         .filter((venta) => venta.metodoPago === nombre)
         .reduce((sum, venta) => sum + venta.total, 0),
     }))
@@ -227,9 +298,23 @@ function PuntoVenta() {
       efectivoEsperado: ventasEfectivo,
       efectivoReal: ventasEfectivo,
       diferencia: 0,
-      transacciones: ventas.length,
+      transacciones: arqueoResumen?.transacciones ?? ventasDelDia.length,
     }
-  }, [ventas, metodosPago])
+  }, [arqueoResumen, ventasDelDia, metodosPago])
+
+  const confirmarArqueo = async () => {
+    try {
+      setIsConfirmingArqueo(true)
+      const confirmado = await confirmarArqueoCaja(arqueoPeriodo.periodoInicio, arqueoPeriodo.periodoFin)
+      setArqueoResumen(confirmado)
+      setArqueoConfirmado(true)
+      toast.success('Arqueo semanal confirmado correctamente.')
+    } catch (error) {
+      setErrorMsg(error.message || 'No fue posible confirmar el arqueo.')
+    } finally {
+      setIsConfirmingArqueo(false)
+    }
+  }
 
   const agregarAlCarrito = (producto) => {
     const itemExistente = carrito.find(item => item.id === producto.id)
@@ -295,6 +380,79 @@ function PuntoVenta() {
       numeroTelefono: '',
     })
     setClienteSeleccionadoId('')
+  }
+
+  const resetClienteForm = () => {
+    setClienteEnEdicion(null)
+    setClienteForm({
+      nombre: '',
+      nit: '',
+      telefono: '',
+      correo: '',
+      direccion: '',
+    })
+  }
+
+  const editarCliente = (cliente) => {
+    setClienteEnEdicion(cliente)
+    setClienteForm({
+      nombre: cliente.nombre || '',
+      nit: cliente.nit || '',
+      telefono: cliente.telefono || '',
+      correo: cliente.correo || '',
+      direccion: cliente.direccion || '',
+    })
+    setErrorMsg('')
+  }
+
+  const guardarCliente = async (event) => {
+    event.preventDefault()
+    const nombre = capitalizeWords(clienteForm.nombre)
+    const nit = clienteForm.nit.trim()
+    const telefono = clienteForm.telefono.trim()
+
+    if (!isValidNombreCliente(nombre)) {
+      setErrorMsg('El nombre del cliente solo debe contener letras y espacios.')
+      return
+    }
+    if (nit && (!/^[A-Za-z0-9-]{1,13}$/.test(nit))) {
+      setErrorMsg('El NIT debe tener máximo 13 caracteres alfanuméricos.')
+      return
+    }
+    if (telefono && (!/^\d{1,8}$/.test(telefono))) {
+      setErrorMsg('El teléfono debe tener máximo 8 números.')
+      return
+    }
+
+    try {
+      setIsSavingCliente(true)
+      setErrorMsg('')
+      const payload = {
+        ...clienteForm,
+        nombre,
+        nit: nit || null,
+        telefono: telefono || null,
+      }
+      const clienteGuardado = clienteEnEdicion
+        ? await updateClientePos(clienteEnEdicion.id, payload)
+        : await createClientePos(payload)
+      const mensajeExito = clienteEnEdicion
+        ? 'Cliente actualizado correctamente.'
+        : 'Cliente creado correctamente.'
+
+      setClientes((previous) => {
+        if (!clienteEnEdicion) return [...previous, clienteGuardado].sort((a, b) => a.nombre.localeCompare(b.nombre))
+        return previous
+          .map((cliente) => cliente.id === clienteGuardado.id ? clienteGuardado : cliente)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre))
+      })
+      resetClienteForm()
+      toast.success(mensajeExito)
+    } catch (error) {
+      setErrorMsg(error.message || 'No fue posible guardar el cliente.')
+    } finally {
+      setIsSavingCliente(false)
+    }
   }
 
   const productosFiltrados = productos.filter(p => {
@@ -371,9 +529,9 @@ function PuntoVenta() {
     <div className="dashboard-shell p-4 md:p-6">
       <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
         {[
-          { label: 'Ventas hoy', value: `Q${ventas.reduce((sum, venta) => sum + Number(venta.total || 0), 0).toFixed(2)}`, change: '+12%', detail: 'vs. ayer', icon: Wallet, tone: 'green' },
-          { label: 'Transacciones', value: String(ventas.length), change: '+9%', detail: 'en el día', icon: ReceiptText, tone: 'blue' },
-          { label: 'Ticket promedio', value: `Q${ventas.length ? (ventas.reduce((sum, venta) => sum + Number(venta.total || 0), 0) / ventas.length).toFixed(2) : '0.00'}`, change: '+4%', detail: 'promedio', icon: TrendingUp, tone: 'purple' },
+          { label: 'Ventas hoy', value: `Q${arqueoCaja.totalVentas.toFixed(2)}`, change: '+12%', detail: 'vs. ayer', icon: Wallet, tone: 'green' },
+          { label: 'Transacciones', value: String(arqueoCaja.transacciones), change: '+9%', detail: 'en el día', icon: ReceiptText, tone: 'blue' },
+          { label: 'Ticket promedio', value: `Q${arqueoCaja.transacciones ? (arqueoCaja.totalVentas / arqueoCaja.transacciones).toFixed(2) : '0.00'}`, change: '+4%', detail: 'promedio', icon: TrendingUp, tone: 'purple' },
           { label: 'Caja actual', value: `Q${arqueoCaja.totalVentas.toFixed(2)}`, change: 'Saldado', detail: 'cerrado al día', icon: WalletCards, tone: 'orange' },
         ].map((metric) => {
           const Icon = metric.icon
@@ -762,7 +920,27 @@ function PuntoVenta() {
             <div className="flex justify-between items-center mb-6 pb-4 border-b">
               <div>
                 <h3 className="text-xl font-bold text-gray-800">Arqueo de Caja</h3>
-                <p className="text-sm text-gray-600">Resumen de ventas POS registradas</p>
+                <p className="text-sm text-gray-600">
+                  Período semanal: domingo 6:00 PM a domingo 6:00 PM
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {arqueoPeriodo.periodoInicio.toLocaleString('es-GT')} — {arqueoPeriodo.periodoFin.toLocaleString('es-GT')}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  arqueoConfirmado ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {arqueoConfirmado ? 'Confirmado' : 'Pendiente'}
+                </span>
+                <button
+                  type="button"
+                  onClick={confirmarArqueo}
+                  disabled={arqueoConfirmado || isConfirmingArqueo}
+                  className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {isConfirmingArqueo ? 'Confirmando...' : arqueoConfirmado ? 'Arqueo confirmado' : 'Confirmar arqueo'}
+                </button>
               </div>
             </div>
 
@@ -804,35 +982,129 @@ function PuntoVenta() {
       )}
 
       {activeTab === 'clientes' && (
-        <div className="bg-white rounded-lg shadow-md p-4 md:p-8">
-          <div className="flex items-center justify-between gap-3 mb-5">
-            <div>
-              <h3 className="text-lg font-bold text-gray-800">Clientes frecuentes</h3>
-              <p className="text-sm text-gray-500">Estos clientes pueden seleccionarse al cobrar una venta.</p>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <form onSubmit={guardarCliente} className="bg-white rounded-lg shadow-md p-4 md:p-6 h-fit">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">
+                  {clienteEnEdicion ? 'Editar cliente' : 'Nuevo cliente'}
+                </h3>
+                <p className="text-sm text-gray-500">Datos disponibles al cobrar una venta.</p>
+              </div>
+              {clienteEnEdicion && (
+                <button type="button" onClick={resetClienteForm} className="text-sm text-gray-500 hover:text-gray-700">
+                  Cancelar
+                </button>
+              )}
             </div>
-            <span className="rounded-full bg-cyan-50 px-3 py-1 text-sm font-semibold text-cyan-700">{clientes.length} activos</span>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <input
+                  required
+                  value={clienteForm.nombre}
+                  onChange={(event) => setClienteForm((previous) => ({
+                    ...previous,
+                    nombre: sanitizeNombreCliente(event.target.value),
+                  }))}
+                  onBlur={(event) => setClienteForm((previous) => ({
+                    ...previous,
+                    nombre: capitalizeWords(event.target.value),
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">NIT</label>
+                  <input
+                    value={clienteForm.nit}
+                    onChange={(event) => setClienteForm((previous) => ({
+                      ...previous,
+                      nit: sanitizeNIT(event.target.value),
+                    }))}
+                    maxLength={13}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                  <input
+                    inputMode="numeric"
+                    value={clienteForm.telefono}
+                    onChange={(event) => setClienteForm((previous) => ({
+                      ...previous,
+                      telefono: sanitizeTelefono(event.target.value),
+                    }))}
+                    maxLength={8}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
+                <input
+                  type="email"
+                  value={clienteForm.correo}
+                  onChange={(event) => setClienteForm((previous) => ({ ...previous, correo: event.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+                <textarea
+                  rows={2}
+                  value={clienteForm.direccion}
+                  onChange={(event) => setClienteForm((previous) => ({ ...previous, direccion: event.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSavingCliente}
+                className="w-full px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-60"
+              >
+                {isSavingCliente ? 'Guardando...' : clienteEnEdicion ? 'Actualizar cliente' : 'Agregar cliente'}
+              </button>
+            </div>
+          </form>
+
+          <div className="xl:col-span-2 bg-white rounded-lg shadow-md p-4 md:p-8">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Clientes frecuentes</h3>
+                <p className="text-sm text-gray-500">Estos clientes pueden seleccionarse al cobrar una venta.</p>
+              </div>
+              <span className="rounded-full bg-cyan-50 px-3 py-1 text-sm font-semibold text-cyan-700">{clientes.length} activos</span>
+            </div>
+            {clientes.length === 0 ? (
+              <p className="py-8 text-center text-gray-500">Aún no hay clientes frecuentes registrados.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="border-b bg-gray-50 text-left text-xs uppercase text-gray-600">
+                    <tr><th className="px-4 py-3">Código</th><th className="px-4 py-3">Nombre</th><th className="px-4 py-3">NIT</th><th className="px-4 py-3">Teléfono</th><th className="px-4 py-3 text-right">Acciones</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {clientes.map((cliente) => (
+                      <tr key={cliente.id}>
+                        <td className="px-4 py-3 font-semibold text-cyan-700">{cliente.codigo}</td>
+                        <td className="px-4 py-3 text-gray-800">{cliente.nombre}</td>
+                        <td className="px-4 py-3 text-gray-600">{cliente.nit || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{cliente.telefono || '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button type="button" onClick={() => editarCliente(cliente)} className="text-cyan-600 hover:text-cyan-800 font-medium">
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-          {clientes.length === 0 ? (
-            <p className="py-8 text-center text-gray-500">Aún no hay clientes frecuentes registrados.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="border-b bg-gray-50 text-left text-xs uppercase text-gray-600">
-                  <tr><th className="px-4 py-3">Código</th><th className="px-4 py-3">Nombre</th><th className="px-4 py-3">NIT</th><th className="px-4 py-3">Teléfono</th></tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {clientes.map((cliente) => (
-                    <tr key={cliente.id}>
-                      <td className="px-4 py-3 font-semibold text-cyan-700">{cliente.codigo}</td>
-                      <td className="px-4 py-3 text-gray-800">{cliente.nombre}</td>
-                      <td className="px-4 py-3 text-gray-600">{cliente.nit || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600">{cliente.telefono || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       )}
 

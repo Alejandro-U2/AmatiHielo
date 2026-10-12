@@ -74,8 +74,9 @@ Modo de autenticacion (`VITE_AUTH_MODE`):
 ## Base de datos (Supabase)
 
 Aplica las migraciones de `supabase/migrations/` en orden numerico desde el SQL Editor de
-Supabase. La historia completa (001-029 y 031-034) deja la base funcional para el login
-y los modulos de usuarios e inventarios, y para los catalogos de los modulos futuros.
+Supabase. Para habilitar completamente el POS, la asociación de clientes frecuentes y los
+arqueos semanales, también deben aplicarse `046_conectar_clientes_frecuentes_pos.sql` y
+`047_arqueos_caja_semanales.sql` después de crear las tablas `cliente` y `venta_pos`.
 
 Ejemplo para el login real: crea un usuario en Auth de Supabase y un perfil asociado con
 rol `Administrador` o `Superusuario` y estado `Activo` para poder operar modulos de gestion.
@@ -87,6 +88,7 @@ rol `Administrador` o `Superusuario` y estado `Activo` para poder operar modulos
 | Login | `POST /auth/login` | `perfil`, `rol`, `estado_usuario` | 001, 002 |
 | Seguridad y Acceso | `/api/users` (CRUD, roles, estados, departamentos, municipios) | `perfil`, `rol`, `estado_usuario`, `departamento`, `municipio` | 016, 018, 020-026, 032 |
 | Inventarios | `/api/inventario` (productos, categorias, tipos de movimiento, movimiento) | `producto`, `movimiento_inventario`, `catalogo_categoria_inventario`, `tipo_movimiento`, `unidad_compra` | 003-010, 015, 022, 027 |
+| Punto de Venta | `/api/pos` (ventas, métodos de pago, clientes frecuentes) y `/api/caja/arqueo` (arqueo semanal) | `venta_pos`, `venta_pos_detalle`, `cliente`, `metodo_pago`, `arqueo_caja` | 013, 019, 029, 031, 046, 047 |
 
 ## Como activar un modulo en proceso
 

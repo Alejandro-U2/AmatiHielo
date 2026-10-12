@@ -4,6 +4,7 @@ import express from 'express'
 import authRoutes from './routes/authRoutes.js'
 import configuracionSistemaRoutes from './routes/configuracionSistemaRoutes.js'
 import chatbotRoutes from './routes/chatbotRoutes.js'
+import cajaRoutes from './routes/cajaRoutes.js'
 import estructuraDatosRoutes from './routes/estructuraDatosRoutes.js'
 import inventarioRoutes from './routes/inventarioRoutes.js'
 import posRoutes from './routes/posRoutes.js'
@@ -51,6 +52,7 @@ app.use('/auth', authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/configuracion-sistema', configuracionSistemaRoutes)
 app.use('/api/chatbot', chatbotRoutes)
+app.use('/api/caja', cajaRoutes)
 app.use('/api/estructura-datos', estructuraDatosRoutes)
 app.use('/api/inventario', inventarioRoutes)
 app.use('/api/pos', posRoutes)
