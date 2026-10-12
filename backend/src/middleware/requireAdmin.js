@@ -51,7 +51,7 @@ export async function requireAdmin(req, res, next) {
     }
 
     return next()
-  } catch (error) {
+  } catch {
     return res.status(500).json({ message: 'No fue posible validar permisos.' })
   }
 }

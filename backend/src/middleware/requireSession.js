@@ -1,4 +1,3 @@
-/* global process */
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 
 const authMode = (process.env.AUTH_MODE || process.env.VITE_AUTH_MODE || 'supabase').toLowerCase()

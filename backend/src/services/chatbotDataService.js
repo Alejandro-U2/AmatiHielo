@@ -1,4 +1,3 @@
-/* global process */
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 import { detectChatbotIntent, isBelowConfiguredMinimum } from './chatbotRules.js'
 

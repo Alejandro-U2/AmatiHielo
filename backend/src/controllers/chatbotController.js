@@ -1,4 +1,3 @@
-/* global process, Buffer */
 import { jsPDF } from 'jspdf'
 import { generateChatbotResponse, isGeminiConfigured } from '../services/geminiService.js'
 import { buildChatbotContext, getInventorySnapshot } from '../services/chatbotDataService.js'
