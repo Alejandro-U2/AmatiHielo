@@ -1,6 +1,7 @@
+/* global process */
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 
-const authMode = (process.env.AUTH_MODE || process.env.VITE_AUTH_MODE || 'mock').toLowerCase()
+const authMode = (process.env.AUTH_MODE || process.env.VITE_AUTH_MODE || 'supabase').toLowerCase()
 
 export async function requireSession(req, res, next) {
   try {
@@ -14,7 +15,7 @@ export async function requireSession(req, res, next) {
     if (authMode === 'mock' && token === 'mock-token') {
       req.auth = {
         user: { id: '1', email: 'admin@local.test' },
-        profile: { nombre: 'Administrador' },
+        profile: { nombre: 'Administrador', rol: 'Administrador', estado: 'Activo' },
       }
       return next()
     }
@@ -27,20 +28,26 @@ export async function requireSession(req, res, next) {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('perfil')
-      .select('id, estado:estado_usuario_id(nombre)')
+      .select('id, rol:rol_id(nombre), estado:estado_usuario_id(nombre)')
       .eq('id', data.user.id)
       .single()
 
     if (!profileError && profile) {
+      const role = Array.isArray(profile.rol) ? profile.rol[0] : profile.rol
       const state = Array.isArray(profile.estado) ? profile.estado[0] : profile.estado
       if (state?.nombre !== 'Activo') {
         return res.status(403).json({ message: 'El usuario se encuentra inactivo. Contacta al administrador.' })
       }
+      req.auth = {
+        user: data.user,
+        profile: {
+          rol: role?.nombre || 'Operario',
+          estado: state?.nombre || 'Activo',
+        },
+      }
     }
 
-    req.auth = {
-      user: data.user,
-    }
+    if (!req.auth) req.auth = { user: data.user, profile: null }
 
     return next()
   } catch {

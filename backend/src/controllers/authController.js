@@ -90,7 +90,16 @@ export async function login(req, res) {
       },
     })
   } catch (error) {
-    return res.status(500).json({ message: error?.message || 'No fue posible iniciar sesion.' })
+    const message = error?.message || ''
+    const isConnectionError = message.toLowerCase().includes('fetch failed')
+      || message.toLowerCase().includes('enotfound')
+      || message.toLowerCase().includes('econn')
+
+    return res.status(503).json({
+      message: isConnectionError
+        ? 'No fue posible conectar con Supabase. Verifica SUPABASE_URL y la conexión de red del backend.'
+        : message || 'No fue posible iniciar sesion.',
+    })
   }
 }
 

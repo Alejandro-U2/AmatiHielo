@@ -52,13 +52,17 @@ function drawHeader(doc, { title, subtitle, logoDataUrl, generatedAt, userName, 
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(continuation ? 16 : 20)
-  doc.text(title, pageWidth / 2, continuation ? 18 : 18, { align: 'center' })
+
+  const titleMaxWidth = pageWidth - 116
+  const titleLines = doc.splitTextToSize(title, titleMaxWidth)
+  const titleY = continuation ? 18 : 18 + Math.max(0, titleLines.length - 1) * 3
+  doc.text(titleLines, pageWidth / 2, titleY, { align: 'center' })
 
   if (!continuation) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(10)
     doc.setTextColor(82, 93, 113)
-    doc.text(subtitle, pageWidth / 2, 25, { align: 'center' })
+    doc.text(subtitle, pageWidth / 2, titleY + titleLines.length * 6, { align: 'center' })
 
     doc.setDrawColor(190, 199, 214)
     doc.setLineWidth(0.3)

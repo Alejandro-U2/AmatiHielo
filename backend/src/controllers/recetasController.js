@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
+import { parseListQuery } from '../utils/listQuery.js'
 
 function buildErrorResponse(res, error, fallbackMessage, statusCode = 500) {
   return res.status(statusCode).json({
@@ -495,18 +496,84 @@ export async function deletePlanProduccion(req, res) {
   }
 }
 
+const PRODUCCION_SORT_COLUMNS = {
+  fecha: 'created_at',
+  cantidad: 'cantidad',
+  usuario: 'usuario',
+}
+
 export async function listProducciones(req, res) {
   try {
-    const { data, error } = await supabaseAdmin
+    const params = parseListQuery(req.query, {
+      sortColumns: PRODUCCION_SORT_COLUMNS,
+      defaultSort: 'fecha',
+    })
+
+    const search = params.search
+
+    let query = supabaseAdmin
       .from('produccion')
-      .select('id, receta_id, cantidad, usuario, lote, created_at')
-      .order('created_at', { ascending: false })
+      .select(`
+        id,
+        receta_id,
+        receta:receta_id ( id, codigo, nombre ),
+        cantidad,
+        usuario,
+        lote,
+        created_at
+      `)
+
+    if (search) {
+      query = query.or(`lote.ilike.%${search}%,usuario.ilike.%${search}%`)
+    }
+    if (params.desde) {
+      query = query.gte('created_at', params.desde)
+    }
+    if (params.hasta) {
+      query = query.lte('created_at', params.hasta)
+    }
+
+    let total = null
+
+    if (params.paginate) {
+      let countQuery = supabaseAdmin
+        .from('produccion')
+        .select('id', { count: 'exact', head: true })
+
+      if (search) {
+        countQuery = countQuery.or(`lote.ilike.%${search}%,usuario.ilike.%${search}%`)
+      }
+      if (params.desde) {
+        countQuery = countQuery.gte('created_at', params.desde)
+      }
+      if (params.hasta) {
+        countQuery = countQuery.lte('created_at', params.hasta)
+      }
+
+      const { count, error: errorCount } = await countQuery
+      if (errorCount) {
+        return buildErrorResponse(res, errorCount, 'No fue posible contar las producciones.')
+      }
+      total = count || 0
+    }
+
+    query = query.order(PRODUCCION_SORT_COLUMNS[params.sortBy] || 'created_at', { ascending: params.sortDir === 'asc' })
+
+    if (params.paginate) {
+      const offset = (params.page - 1) * params.pageSize
+      query = query.range(offset, offset + params.pageSize - 1)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       return buildErrorResponse(res, error, 'No fue posible cargar las producciones.')
     }
 
-    return res.json({ data: data || [] })
+    return res.json({
+      data: data || [],
+      meta: total === null ? undefined : { total, page: params.page, pageSize: params.pageSize },
+    })
   } catch (error) {
     return buildErrorResponse(res, error, 'No fue posible cargar las producciones.')
   }

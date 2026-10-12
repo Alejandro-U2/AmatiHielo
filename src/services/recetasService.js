@@ -1,12 +1,10 @@
 import { getAccessToken } from './authService'
+import { buildQueryString } from '../utils/queryString'
+import { API_URL as configuredApiUrl } from './apiUrl'
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = configuredApiUrl.replace(/\/$/, '')
 
 async function request(path, options = {}) {
-  if (!API_URL) {
-    throw new Error('Falta configurar VITE_API_URL para recetas.')
-  }
-
   const token = getAccessToken()
 
   if (!token) {
@@ -138,14 +136,32 @@ function normalizePlan(row) {
   }
 }
 
+function formatFecha(value) {
+  if (!value) return 'Sin registro'
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return 'Sin registro'
+
+  return parsed.toLocaleString('es-GT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 function normalizeProduccion(row) {
   return {
     id: row.id,
     recetaId: row.receta_id,
+    receta: row.receta?.nombre || row.receta || 'Sin receta',
     cantidad: Number(row.cantidad || 0),
     usuario: row.usuario,
     lote: row.lote,
     createdAt: row.created_at,
+    fecha: formatFecha(row.created_at),
   }
 }
 
@@ -264,9 +280,12 @@ export async function deletePlanProduccion(id) {
   })
 }
 
-export async function getProducciones() {
-  const payload = await request('/api/recetas/producciones')
-  return (payload?.data || []).map(normalizeProduccion)
+export async function getProducciones(params) {
+  const payload = await request(`/api/recetas/producciones${buildQueryString(params)}`)
+  return {
+    data: (payload?.data || []).map(normalizeProduccion),
+    meta: payload?.meta || null,
+  }
 }
 
 export async function createProduccion(input) {

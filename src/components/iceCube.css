@@ -1,0 +1,31 @@
+.ice-cube-button { display: inline-flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; cursor: pointer; }
+.ice-cube { --cube-size: 78px; display: inline-flex; position: relative; width: var(--cube-size); height: var(--cube-size); flex: 0 0 auto; align-items: center; justify-content: center; vertical-align: middle; transform-origin: 50% 60%; transition: transform .3s ease, filter .3s ease; }
+.ice-cube--hero { --cube-size: clamp(180px, 23vw, 235px); }
+.ice-cube--avatar { --cube-size: 40px; }
+.ice-cube--floating { --cube-size: 54px; }
+.ice-cube--compact { --cube-size: 28px; }
+.ice-cube--small { --cube-size: 40px; }
+.ice-cube--regular { --cube-size: 78px; }
+.ice-cube__image { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 9px 12px rgba(45,125,195,.12)); transform-origin: 50% 64%; animation: ice-character-float 5s ease-in-out infinite; transition: filter .35s ease; }
+.ice-cube--avatar .ice-cube__image,.ice-cube--small .ice-cube__image { animation-duration: 5.4s; }
+.ice-cube--compact .ice-cube__image { animation-duration: 5.8s; }
+.ice-cube:hover { transform: scale(1.045); }
+.ice-cube:hover .ice-cube__image { filter: drop-shadow(0 12px 17px rgba(45,125,195,.2)) brightness(1.045); }
+.ice-cube--interactive { cursor: pointer; }
+.ice-cube-button:focus-visible { outline: 2px solid #0891b2; outline-offset: 4px; border-radius: 12px; }
+.ice-cube--processing .ice-cube__image { animation: ice-character-process 5.2s ease-in-out infinite; filter: drop-shadow(0 0 15px rgba(73,190,245,.4)) brightness(1.055); }
+.ice-cube--responding .ice-cube__image { animation: ice-character-response .68s ease-out, ice-character-float 5s .68s ease-in-out infinite; }
+.ice-cube--error .ice-cube__image { animation: ice-character-error .85s ease-in-out 1, ice-character-float 5s .85s ease-in-out infinite; filter: drop-shadow(0 5px 8px rgba(91,142,171,.13)) brightness(.96) saturate(.82); }
+.amati-chat-pop { transform-origin: bottom right; transition: opacity .18s ease, transform .18s cubic-bezier(.2,.8,.2,1), visibility .18s linear; }
+.amati-chat-pop.is-open { opacity: 1; transform: translateY(0) scale(1); visibility: visible; }
+.amati-chat-pop.is-closed { opacity: 0; pointer-events: none; transform: translateY(12px) scale(.97); visibility: hidden; }
+.ice-launcher:active { transform: scale(.94); }
+.ice-launcher::before { content: ''; position: absolute; inset: -6px; z-index: -1; border-radius: 28px; background: radial-gradient(circle, rgba(62, 198, 235, .13), transparent 72%); opacity: .75; transition: opacity .2s ease; }
+.ice-launcher:hover::before,.ice-launcher:focus-visible::before { opacity: 1; }
+.ice-launcher[aria-expanded="true"] .ice-cube__image { animation: none; }
+@keyframes ice-character-float { 0%,100% { transform: translateY(0) rotateZ(-.6deg); } 50% { transform: translateY(-8px) rotateZ(.7deg); } }
+@keyframes ice-character-process { 0%,100% { transform: perspective(700px) translateY(0) rotateY(-3deg) rotateZ(-.5deg); filter: brightness(1.02) drop-shadow(0 0 10px rgba(73,190,245,.28)); } 50% { transform: perspective(700px) translateY(-7px) rotateY(4deg) rotateZ(.6deg) scale(1.018); filter: brightness(1.08) drop-shadow(0 0 17px rgba(73,190,245,.48)); } }
+@keyframes ice-character-response { 0% { transform: translateY(0) scale(.98); filter: brightness(1); } 48% { transform: translateY(-6px) scale(1.045); filter: brightness(1.12) drop-shadow(0 0 17px rgba(91,195,255,.45)); } 100% { transform: translateY(0) scale(1); filter: brightness(1); } }
+@keyframes ice-character-error { 0%,100% { transform: translateY(0); } 35% { transform: translateY(-2px) rotateZ(-.7deg); } 70% { transform: translateY(1px) rotateZ(.5deg); } }
+@keyframes chat-pop-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .ice-cube__image,.amati-chat-pop { animation: none !important; transition: none !important; } }

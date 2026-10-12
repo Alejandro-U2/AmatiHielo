@@ -1,5 +1,12 @@
 import { Router } from 'express'
-import { createVenta, listMetodosPago, listVentas } from '../controllers/posController.js'
+import {
+  createCliente,
+  createVenta,
+  listClientes,
+  listMetodosPago,
+  listVentas,
+  updateCliente,
+} from '../controllers/posController.js'
 import { requireSession } from '../middleware/requireSession.js'
 
 const router = Router()
@@ -9,5 +16,8 @@ router.use(requireSession)
 router.get('/venta', listVentas)
 router.post('/venta', createVenta)
 router.get('/metodos-pago', listMetodosPago)
+router.get('/clientes', listClientes)
+router.post('/clientes', createCliente)
+router.patch('/clientes/:id', updateCliente)
 
 export default router

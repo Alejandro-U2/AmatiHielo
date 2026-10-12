@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { FileDown, RefreshCw, X } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   getRecetas,
   getProducciones,
@@ -15,6 +17,8 @@ import {
 import { listProductosInventario } from '../../services/inventarioService'
 import Pagination from '../../components/Pagination'
 import SortableHeader from '../../components/SortableHeader'
+import ReporteModal from '../../components/ReporteModal'
+import { generarReporteModulo } from '../../utils/moduloExport'
 import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
 
@@ -61,6 +65,8 @@ function ProduccionRecetas() {
   })
   const [productosInventario, setProductosInventario] = useState([])
   const [productoSeleccionadoId, setProductoSeleccionadoId] = useState('')
+  const [reporteOpen, setReporteOpen] = useState(false)
+  const [generandoReporte, setGenerandoReporte] = useState(false)
   const [bomCostosForm, setBomCostosForm] = useState({
     costoElectricidad: 0,
     costoManoObra: 0,
@@ -88,13 +94,20 @@ function ProduccionRecetas() {
   const [filterCategoria, setFilterCategoria] = useState('todos')
   const [searchTermReceta, setSearchTermReceta] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [currentPageProd, setCurrentPageProd] = useState(1)
   const [pageSize, setPageSize] = useState(5)
+  const [pageSizeProd, setPageSizeProd] = useState(5)
   const [currentPageCosteo, setCurrentPageCosteo] = useState(1)
   const [pageSizeCosteo, setPageSizeCosteo] = useState(2)
+  const [produccionesTotal, setProduccionesTotal] = useState(0)
+  const [prodFechaDesde, setProdFechaDesde] = useState('')
+  const [prodFechaHasta, setProdFechaHasta] = useState('')
+  const [prodSearchTerm, setProdSearchTerm] = useState('')
+  const [prodReloadKey, setProdReloadKey] = useState(0)
   const recetaSort = useTableSort(null)
-  const recetasFiltradas = (filterCategoria === 'todos'
-    ? recetas
-    : recetas.filter((receta) => receta.categoria === filterCategoria))
+  const prodSort = useTableSort('fecha', 'desc')
+
+  const recetasFiltradas = (filterCategoria === 'todos' ? recetas : recetas.filter((receta) => receta.categoria === filterCategoria))
     .filter((receta) => {
       const normalizedSearch = searchTermReceta.trim().toLowerCase()
       if (!normalizedSearch) {
@@ -121,6 +134,8 @@ function ProduccionRecetas() {
   const totalPages = Math.max(1, Math.ceil(sortedRecetas.length / pageSize))
   const paginatedRecetas = sortedRecetas.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
+  const totalPagesProd = Math.max(1, Math.ceil(produccionesTotal / pageSizeProd))
+
   const totalPagesCosteo = Math.max(1, Math.ceil(recetas.length / pageSizeCosteo))
   const paginatedCosteo = recetas.slice((currentPageCosteo - 1) * pageSizeCosteo, currentPageCosteo * pageSizeCosteo)
 
@@ -133,39 +148,135 @@ function ProduccionRecetas() {
   }, [filterCategoria, searchTermReceta, recetaSort.sortBy, recetaSort.sortDir, pageSize])
 
   useEffect(() => {
-    const cargarDatos = async () => {
-      try {
-        setLoading(true)
-        setErrorMsg('')
-        const [recetasData, produccionesData, categoriasData, presentacionesData, unidadesData] = await Promise.all([
-          getRecetas(),
-          getProducciones(),
-          listCategoriasReceta().catch(() => []),
-          listPresentacionesReceta().catch(() => []),
-          listUnidadesMedida().catch(() => []),
-        ])
-        setRecetas(recetasData)
-        setProducciones(produccionesData)
-        if (categoriasData.length > 0) {
-          setCategoriasReceta(categoriasData.map((categoria) => categoria.nombre))
-        }
-        if (presentacionesData.length > 0) {
-          setPresentaciones(presentacionesData.map((presentacion) => presentacion.nombre))
-        }
-        if (unidadesData.length > 0) {
-          setUnidadesMedida(unidadesData.map((unidad) => unidad.nombre))
-        }
-      } catch (error) {
-        setErrorMsg(error.message || 'Error al cargar datos.')
-        setRecetas([])
-        setProducciones([])
-      } finally {
-        setLoading(false)
-      }
+    setCurrentPageProd(1)
+  }, [pageSizeProd, prodSort.sortBy, prodSort.sortDir, prodFechaDesde, prodFechaHasta, prodSearchTerm])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const params = {
+      page: currentPageProd,
+      pageSize: pageSizeProd,
+      sortBy: prodSort.sortBy || undefined,
+      sortDir: prodSort.sortDir,
+      desde: prodFechaDesde || undefined,
+      hasta: prodFechaHasta || undefined,
+      search: prodSearchTerm.trim() || undefined,
     }
 
-    cargarDatos()
+    getProducciones(params)
+      .then((response) => {
+        if (cancelled) return
+        setProducciones(response.data)
+        setProduccionesTotal(response.meta?.total ?? response.data.length)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProducciones([])
+          setProduccionesTotal(0)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentPageProd, pageSizeProd, prodSort.sortBy, prodSort.sortDir, prodFechaDesde, prodFechaHasta, prodSearchTerm, prodReloadKey])
+
+  const categoriasReporte = (() => {
+    const counts = {}
+    recetas.forEach((receta) => {
+      const categoria = receta.categoria || 'Sin categoría'
+      counts[categoria] = (counts[categoria] || 0) + 1
+    })
+
+    const options = Object.keys(counts).map((categoria) => ({
+      value: categoria,
+      label: categoria,
+      count: counts[categoria],
+    }))
+
+    return [{ value: '', label: 'Todas', count: recetas.length }, ...options]
+  })()
+
+  const handleGenerarReporteRecetas = async (categoria = '') => {
+    try {
+      setGenerandoReporte(true)
+      const rows = categoria
+        ? recetas.filter((receta) => (receta.categoria || '') === categoria)
+        : recetas
+
+      const columns = [
+        { key: 'nombre', label: 'NOMBRE', width: 46, align: 'left' },
+        { key: 'categoria', label: 'CATEGORÍA', width: 24, align: 'center' },
+        { key: 'presentacion', label: 'PRESENTACIÓN', width: 26, align: 'center' },
+        { key: 'costoTotal', label: 'COSTO TOTAL', width: 30, align: 'center' },
+        { key: 'precioVenta', label: 'PRECIO VENTA', width: 30, align: 'center' },
+        { key: 'utilidad', label: 'UTILIDAD', width: 30, align: 'center' },
+      ]
+
+      await generarReporteModulo({
+        fileName: 'reporte_recetas.pdf',
+        title: 'REPORTE DE RECETAS Y COSTOS DE PRODUCCIÓN',
+        columns,
+        rows: rows.map((receta) => {
+          const costoTotal = Number(receta.costoTotal || 0)
+          const precioVenta = Number(receta.precioVenta || 0)
+          const utilidad = precioVenta - costoTotal
+          return {
+            nombre: receta.nombre,
+            categoria: receta.categoria || '-',
+            presentacion: receta.presentacion || '-',
+            costoTotal: `Q${costoTotal.toFixed(2)}`,
+            precioVenta: `Q${precioVenta.toFixed(2)}`,
+            utilidad: `Q${utilidad.toFixed(2)}`,
+          }
+        }),
+        totalLabel: 'TOTAL DE RECETAS',
+        totalValue: rows.length,
+        filterLabel: categoria || 'Todas',
+        note: 'Reporte del catálogo de recetas con el desglose de costos de producción y precio de venta.',
+      })
+      toast.success('Reporte de recetas generado correctamente.')
+      setReporteOpen(false)
+    } catch (error) {
+      toast.error(error.message || 'No fue posible generar el reporte.')
+    } finally {
+      setGenerandoReporte(false)
+    }
+  }
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setErrorMsg('')
+      const [recetasData, categoriasData, presentacionesData, unidadesData] = await Promise.all([
+        getRecetas(),
+        listCategoriasReceta().catch(() => []),
+        listPresentacionesReceta().catch(() => []),
+        listUnidadesMedida().catch(() => []),
+      ])
+      setRecetas(recetasData)
+      if (categoriasData.length > 0) {
+        setCategoriasReceta(categoriasData.map((categoria) => categoria.nombre))
+      }
+      if (presentacionesData.length > 0) {
+        setPresentaciones(presentacionesData.map((presentacion) => presentacion.nombre))
+      }
+      if (unidadesData.length > 0) {
+        setUnidadesMedida(unidadesData.map((unidad) => unidad.nombre))
+      }
+    } catch (error) {
+      setErrorMsg(error.message || 'Error al cargar datos.')
+      setRecetas([])
+      setProducciones([])
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const getCategoriaColor = (categoria) => {
     switch(categoria) {
@@ -588,12 +699,34 @@ function ProduccionRecetas() {
                 </button>
               )}
             </div>
-            <button
-              onClick={() => openModal('addReceta')}
-              className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-shadow text-sm whitespace-nowrap"
-            >
-              + Nueva Receta
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setReporteOpen(true)}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow text-sm whitespace-nowrap flex items-center gap-2 justify-center"
+              >
+                <FileDown size={16} aria-hidden="true" />
+                Reporte
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  loadData()
+                  setProdReloadKey((key) => key + 1)
+                }}
+                disabled={loading}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm whitespace-nowrap flex items-center gap-2 justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+                Recargar
+              </button>
+              <button
+                onClick={() => openModal('addReceta')}
+                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-shadow text-sm whitespace-nowrap"
+              >
+                + Nueva Receta
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -770,15 +903,69 @@ function ProduccionRecetas() {
             </button>
           </div>
 
+          <div className="bg-white rounded-lg shadow-md overflow-hidden mb-4">
+            <div className="p-4 border-b border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
+                  <input
+                    type="text"
+                    placeholder="Lote o usuario..."
+                    value={prodSearchTerm}
+                    onChange={(e) => setProdSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
+                  <input
+                    type="date"
+                    value={prodFechaDesde}
+                    onChange={(e) => setProdFechaDesde(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
+                  <input
+                    type="date"
+                    value={prodFechaHasta}
+                    onChange={(e) => setProdFechaHasta(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-end justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProdSearchTerm('')
+                      setProdFechaDesde('')
+                      setProdFechaHasta('')
+                      prodSort.setSortBy('fecha')
+                      prodSort.setSortDir('desc')
+                    }}
+                    className="text-sm text-cyan-600 hover:text-cyan-800 font-medium inline-flex items-center gap-1"
+                  >
+                    <X size={14} aria-hidden="true" />
+                    Limpiar filtros
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">
+                {produccionesTotal === 1 ? '1 producción registrada' : `${produccionesTotal} producciones registradas`}
+              </p>
+            </div>
+          </div>
+
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
             <table className="min-w-full">
               <thead className="bg-gradient-to-r from-cyan-50 to-blue-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Fecha y Hora</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Fecha y Hora" sortKey="fecha" sortBy={prodSort.sortBy} sortDir={prodSort.sortDir} onSort={prodSort.toggle} className="text-gray-700" /></th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Receta</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Cantidad</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Cantidad" sortKey="cantidad" sortBy={prodSort.sortBy} sortDir={prodSort.sortDir} onSort={prodSort.toggle} align="center" className="text-gray-700" /></th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Lote</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Usuario</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase"><SortableHeader label="Usuario" sortKey="usuario" sortBy={prodSort.sortBy} sortDir={prodSort.sortDir} onSort={prodSort.toggle} className="text-gray-700" /></th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Acciones</th>
                 </tr>
               </thead>
@@ -802,6 +989,15 @@ function ProduccionRecetas() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            page={currentPageProd}
+            totalPages={totalPagesProd}
+            onChange={setCurrentPageProd}
+            pageSize={pageSizeProd}
+            onPageSizeChange={setPageSizeProd}
+            totalItems={produccionesTotal}
+          />
 
           <div className="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
             <div className="flex items-start">
@@ -1823,6 +2019,16 @@ function ProduccionRecetas() {
           </div>
         </div>
       )}
+
+      <ReporteModal
+        open={reporteOpen}
+        title="Reporte de recetas y costos"
+        filterLabel="Categoría"
+        filterOptions={categoriasReporte}
+        generating={generandoReporte}
+        onGenerate={handleGenerarReporteRecetas}
+        onClose={() => setReporteOpen(false)}
+      />
     </div>
   )
 }

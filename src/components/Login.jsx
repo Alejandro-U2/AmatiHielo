@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Moon, Sun } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
 import { forgotPassword, isAuthenticated, login } from '../services/authService'
+import { useTheme } from '../theme/useTheme'
 
 function Login() {
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   const [showPassword, setShowPassword] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -87,6 +90,34 @@ function Login() {
       overflow: 'hidden',
       fontFamily: "'Outfit', sans-serif",
     }}>
+
+      {/* Alternar tema */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        style={{
+          position: 'fixed',
+          top: 16,
+          right: 16,
+          zIndex: 50,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 42,
+          height: 42,
+          borderRadius: 12,
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          color: '#ffffff',
+          cursor: 'pointer',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          transition: 'all 0.2s ease',
+        }}
+      >
+        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
 
       <style>{`
         @keyframes snowTwinkle {

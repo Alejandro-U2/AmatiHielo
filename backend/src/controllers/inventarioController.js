@@ -335,10 +335,15 @@ export async function listMovimientos(req, res) {
 
     const dataWithProductos = movimientos.map(m => {
       const numeroFactura = m.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim()
+      const costoUnitario = Number(m.costo_unitario_movimiento ?? 0)
+      const cantidad = Math.abs(Number(m.cantidad ?? 0))
       return {
         ...m,
         producto: productoMap.get(m.producto_id) || null,
         proveedor: proveedorMap.get(m.proveedor_id) || null,
+        perdida_economica: m.tipo === 'Merma'
+          ? Number((cantidad * costoUnitario).toFixed(2))
+          : 0,
         documento_url: documentoMap.get(m.id) || (numeroFactura ? documentoMap.get(numeroFactura) || null : null),
       }
     })

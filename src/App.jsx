@@ -4,6 +4,16 @@ import Login from './components/Login'
 import Dashboard from './components/Dashboard'
 import RecuperarContrasena from './components/RecuperarContrasena'
 import { isAuthenticated } from './services/authService'
+import { ChatbotProvider, FloatingChatbot } from './components/Chatbot'
+
+function DashboardWithAssistant() {
+  return (
+    <ChatbotProvider>
+      <Dashboard />
+      <FloatingChatbot />
+    </ChatbotProvider>
+  )
+}
 
 function ProtectedRoute({ children }) {
   if (!isAuthenticated()) {
@@ -24,7 +34,7 @@ function App() {
           path="/dashboard"
           element={(
             <ProtectedRoute>
-              <Dashboard />
+              <DashboardWithAssistant />
             </ProtectedRoute>
           )}
         />

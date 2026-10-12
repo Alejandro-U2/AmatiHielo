@@ -100,6 +100,11 @@ function normalizeProducto(row) {
 
 function normalizeMovimiento(row) {
   const createdAt = row.createdAt ?? row.created_at ?? row.fecha
+  const cantidad = Math.abs(Number(row.cantidad || 0))
+  const costoUnitario = Number(row.costo_unitario_movimiento ?? row.costo_unitario ?? 0)
+  const perdidaEconomica = row.perdida_economica === null || row.perdida_economica === undefined
+    ? (row.tipo === 'Merma' ? Number((cantidad * costoUnitario).toFixed(2)) : 0)
+    : Number(row.perdida_economica)
 
   return {
     id: row.id,
@@ -108,14 +113,14 @@ function normalizeMovimiento(row) {
     tipo: row.tipo,
     producto: row.producto?.nombre || row.producto_nombre || row.producto || 'Producto',
     proveedor: row.proveedor?.nombre || row.proveedor_nombre || '',
-    cantidad: Number(row.cantidad || 0),
+    cantidad,
     usuario: row.usuario || 'Sistema',
     motivo: row.motivo || 'Sin motivo',
     documentoUrl: row.documento_url || row.documentoUrl || '',
     motivoTipo: row.motivo_tipo || row.motivoTipo || '',
     fechaMovimiento: row.fecha_movimiento || row.fechaMovimiento || row.created_at,
-    costoUnitario: Number(row.costo_unitario_movimiento ?? row.costo_unitario ?? 0),
-    perdidaEconomica: Number(row.perdida_economica ?? 0),
+    costoUnitario,
+    perdidaEconomica,
     stockAntes: row.stock_antes === null || row.stock_antes === undefined ? null : Number(row.stock_antes),
     stockDespues: row.stock_despues === null || row.stock_despues === undefined ? null : Number(row.stock_despues),
   }

@@ -1,6 +1,7 @@
 import { getAccessToken } from './authService'
+import { API_URL as configuredApiUrl } from './apiUrl'
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = configuredApiUrl.replace(/\/$/, '')
 
 type RequestOptions = {
   method?: string

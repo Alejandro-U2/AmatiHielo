@@ -1,12 +1,9 @@
 import { getAccessToken } from './authService'
+import { API_URL as configuredApiUrl } from './apiUrl'
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = configuredApiUrl.replace(/\/$/, '')
 
 async function request(path, options = {}) {
-  if (!API_URL) {
-    throw new Error('Falta configurar VITE_API_URL para POS.')
-  }
-
   const token = getAccessToken()
 
   if (!token) {
@@ -98,6 +95,40 @@ export async function listMetodosPago() {
     esSistema: Boolean(row.es_sistema ?? row.esSistema),
     orden: Number(row.orden || 0),
   }))
+}
+
+function normalizeCliente(row = {}) {
+  return {
+    id: row.id,
+    codigo: row.codigo || '',
+    nombre: row.nombre || '',
+    nit: row.nit || '',
+    telefono: row.telefono || '',
+    correo: row.correo || '',
+    direccion: row.direccion || '',
+    activo: Boolean(row.activo ?? true),
+  }
+}
+
+export async function listClientesPos() {
+  const payload = await request('/api/pos/clientes')
+  return (payload?.data || []).map(normalizeCliente)
+}
+
+export async function createClientePos(input) {
+  const payload = await request('/api/pos/clientes', {
+    method: 'POST',
+    body: input,
+  })
+  return normalizeCliente(payload?.data || {})
+}
+
+export async function updateClientePos(id, input) {
+  const payload = await request(`/api/pos/clientes/${id}`, {
+    method: 'PATCH',
+    body: input,
+  })
+  return normalizeCliente(payload?.data || {})
 }
 
 export async function createVentaPos(input) {

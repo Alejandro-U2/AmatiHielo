@@ -13,6 +13,7 @@ function normalizeVenta(row) {
     id: row.id,
     ticket: row.ticket,
     cliente: row.cliente || 'Cliente General',
+    clienteId: row.cliente_id ?? row.clienteId ?? null,
     metodoPago: row.metodo_pago,
     subtotal: Number(row.subtotal || 0),
     iva: Number(row.iva || 0),
@@ -34,6 +35,7 @@ function normalizeVenta(row) {
       total: Number(detalle.total || 0),
     })),
   }
+
 }
 
 function normalizeVentaItem(item = {}) {
@@ -79,6 +81,83 @@ function isValidTelefono(value = '') {
   return normalized.length > 0 && /^\d+$/.test(normalized)
 }
 
+const CLIENTE_FIELDS = 'id, codigo, nombre, nit, telefono, correo, direccion, activo, created_at, updated_at'
+
+function normalizeClientePayload(body = {}) {
+  return {
+    nombre: String(body.nombre || '').trim(),
+    nit: String(body.nit || '').trim() || null,
+    telefono: String(body.telefono || '').trim() || null,
+    correo: String(body.correo || '').trim() || null,
+    direccion: String(body.direccion || '').trim() || null,
+  }
+}
+
+function validateClientePayload(payload) {
+  if (!payload.nombre) return 'El nombre del cliente es obligatorio.'
+  if (!isValidNombreCliente(payload.nombre)) return 'El nombre del cliente solo debe contener letras y espacios.'
+  if (payload.nit && !/^[A-Za-z0-9-]{1,13}$/.test(payload.nit)) return 'El NIT debe tener máximo 13 caracteres alfanuméricos.'
+  if (payload.telefono && !/^\d{1,8}$/.test(payload.telefono)) return 'El teléfono debe tener máximo 8 números.'
+  return null
+}
+
+export async function listClientes(req, res) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('cliente')
+      .select(CLIENTE_FIELDS)
+      .eq('activo', true)
+      .order('nombre', { ascending: true })
+
+    if (error) return buildErrorResponse(res, error, 'No fue posible cargar los clientes.')
+    return res.json({ data: data || [] })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible cargar los clientes.')
+  }
+}
+
+export async function createCliente(req, res) {
+  const payload = normalizeClientePayload(req.body)
+  const validationError = validateClientePayload(payload)
+  if (validationError) return res.status(400).json({ message: validationError })
+
+  try {
+    const { data: cliente, error } = await supabaseAdmin
+      .from('cliente')
+      .insert({ ...payload, codigo: `CLI-${Date.now().toString().slice(-8)}` })
+      .select(CLIENTE_FIELDS)
+      .single()
+
+    if (error) return buildErrorResponse(res, error, 'No fue posible crear el cliente.', 400)
+    return res.status(201).json({ data: cliente })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible crear el cliente.')
+  }
+}
+
+export async function updateCliente(req, res) {
+  const id = Number(req.params.id)
+  const payload = normalizeClientePayload(req.body)
+  const validationError = validateClientePayload(payload)
+  if (!Number.isInteger(id) || validationError) {
+    return res.status(400).json({ message: validationError || 'El cliente seleccionado no es válido.' })
+  }
+
+  try {
+    const { data: cliente, error } = await supabaseAdmin
+      .from('cliente')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select(CLIENTE_FIELDS)
+      .single()
+
+    if (error) return buildErrorResponse(res, error, 'No fue posible actualizar el cliente.', 400)
+    return res.json({ data: cliente })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible actualizar el cliente.')
+  }
+}
+
 export async function listVentas(req, res) {
   try {
     const { data: ventas, error } = await supabaseAdmin
@@ -93,6 +172,7 @@ export async function listVentas(req, res) {
         total,
         usuario,
         necesita_factura,
+        cliente_id,
         nit,
         nombre_cliente,
         numero_telefono,
@@ -128,6 +208,7 @@ export async function createVenta(req, res) {
   const items = (req.body?.items || []).map(normalizeVentaItem)
   const metodoPago = req.body?.metodoPago || req.body?.metodo_pago || 'Efectivo'
   const cliente = req.body?.cliente || null
+  const clienteId = Number(req.body?.clienteId ?? req.body?.cliente_id)
   const usuario = req.auth?.profile?.nombre || req.auth?.user?.email || 'Sistema'
   const necesitaFactura = req.body?.necesitaFactura || req.body?.necesita_factura || false
   const nit = req.body?.nit || null
@@ -166,7 +247,7 @@ export async function createVenta(req, res) {
     const { data, error } = await supabaseAdmin.rpc('registrar_venta_pos_consumo_directo', {
       p_items: items,
       p_metodo_pago: metodoPago,
-      p_cliente: cliente,
+      p_cliente: cliente || null,
       p_usuario: usuario,
       p_necesita_factura: necesitaFactura,
       p_nit: nit,
@@ -178,7 +259,20 @@ export async function createVenta(req, res) {
       return buildErrorResponse(res, error, 'No fue posible registrar la venta.', 400)
     }
 
-    return res.status(201).json({ data: normalizeVenta(data) })
+    let venta = data
+    if (Number.isInteger(clienteId) && clienteId > 0) {
+      const { data: ventaActualizada, error: errorCliente } = await supabaseAdmin
+        .from('venta_pos')
+        .update({ cliente_id: clienteId })
+        .eq('id', data.id)
+        .select('*')
+        .single()
+
+      if (errorCliente) return buildErrorResponse(res, errorCliente, 'La venta se registró, pero no fue posible asociar el cliente.', 400)
+      venta = ventaActualizada
+    }
+
+    return res.status(201).json({ data: normalizeVenta(venta) })
   } catch (error) {
     return buildErrorResponse(res, error, 'No fue posible registrar la venta.')
   }

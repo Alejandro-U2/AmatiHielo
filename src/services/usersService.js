@@ -1,12 +1,9 @@
 import { getAccessToken } from './authService'
+import { API_URL as configuredApiUrl } from './apiUrl'
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = configuredApiUrl.replace(/\/$/, '')
 
 function getApiUrl(path) {
-  if (!API_URL) {
-    throw new Error('Falta configurar VITE_API_URL para conectar con el backend.')
-  }
-
   return `${API_URL}${path}`
 }
 
@@ -189,8 +186,17 @@ export async function updateUserProfile(
   })
 }
 
-export async function deleteUserProfile(id) {
+export async function updateUsuarioEstado(id, estado) {
   await request(`/api/users/${id}`, {
-    method: 'DELETE',
+    method: 'PUT',
+    body: JSON.stringify({ estado }),
   })
+}
+
+export async function deleteUserProfile(id) {
+  if (!id) {
+    throw new Error('El id del usuario es obligatorio.')
+  }
+
+  await request(`/api/users/${id}`, { method: 'DELETE' })
 }

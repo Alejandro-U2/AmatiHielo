@@ -17,6 +17,7 @@ import { listProductosInventario, listMovimientosInventario } from '../../servic
 import { getRecetas } from '../../services/recetasService'
 import { buildReportData } from '../../utils/reportesUtils'
 import { generateGenericReportPdf, generateReportExcel, generateSalesReportPdf } from '../../utils/reportesExport'
+import Pagination from '../../components/Pagination'
 
 const reports = [
   {
@@ -71,6 +72,8 @@ const reports = [
 
 function Reportes() {
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(5)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [sales, setSales] = useState([])
@@ -93,7 +96,7 @@ function Reportes() {
 
         setSales(ventasData)
         setProducts(productosData)
-        setMovements(movimientosData)
+        setMovements(movimientosData?.data ?? movimientosData)
         setRecipes(recetasData)
       } catch (error) {
         toast.error(error.message || 'No fue posible cargar los reportes')
@@ -120,6 +123,13 @@ function Reportes() {
     }
 
     return reports.filter((report) => report.category === selectedCategory)
+  }, [selectedCategory])
+
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize))
+  const paginatedReports = filteredReports.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  useEffect(() => {
+    setCurrentPage(1)
   }, [selectedCategory])
 
   const handleExport = async (report, format) => {
@@ -237,55 +247,34 @@ function Reportes() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg flex items-center justify-center">
-              <FileText className="text-white" size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Reportes Disponibles</p>
-              <p className="text-2xl font-bold text-gray-900">{reports.length}</p>
-            </div>
-          </div>
-        </div>
+    <div className="dashboard-shell">
+      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+        {[
+          { label: 'Reportes disponibles', value: String(reports.length), change: '+3', detail: 'reportes activos', icon: FileText, tone: 'blue' },
+          { label: 'Ventas del periodo', value: String(reportData.salesCount), change: '+12%', detail: 'transacciones', icon: Download, tone: 'green' },
+          { label: 'Recetas registradas', value: String(reportData.cards[2].value), change: '+4%', detail: 'catalogo', icon: Calendar, tone: 'purple' },
+          { label: 'Stock bajo', value: String(reportData.lowStockProducts), change: 'Revisión', detail: 'requiere atención', icon: TrendingUp, tone: 'orange', negative: true },
+        ].map((metric) => {
+          const MetricIcon = metric.icon
 
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
-              <Download className="text-white" size={24} />
+          return (
+            <div key={metric.label} className={`dashboard-kpi dashboard-tone-${metric.tone}`}>
+              <div className="dashboard-kpi-icon"><MetricIcon size={25} strokeWidth={2.2} /></div>
+              <div className="min-w-0">
+                <p className="dashboard-kpi-label">{metric.label}</p>
+                <p className="dashboard-kpi-value">{metric.value}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className={`dashboard-kpi-change ${metric.negative ? 'is-negative' : ''}`}>{metric.negative ? '↓' : '↑'} {metric.change}</span>
+                  <span className="dashboard-kpi-detail">{metric.detail}</span>
+                </div>
+              </div>
+              <div className={`dashboard-sparkline ${metric.tone === 'blue' ? 'dashboard-chart-blue' : metric.tone === 'green' ? 'dashboard-chart-green' : metric.tone === 'purple' ? 'dashboard-chart-purple' : 'dashboard-chart-orange'}`} aria-hidden="true" />
+              <button type="button" className="dashboard-round-action" aria-label={`Ver ${metric.label}`}>
+                <FileText size={18} />
+              </button>
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Ventas del periodo</p>
-              <p className="text-2xl font-bold text-gray-900">{reportData.salesCount}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Calendar className="text-white" size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Recetas registradas</p>
-              <p className="text-2xl font-bold text-gray-900">{reportData.cards[2].value}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
-              <TrendingUp className="text-white" size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Productos con stock bajo</p>
-              <p className="text-2xl font-bold text-gray-900">{reportData.lowStockProducts}</p>
-            </div>
-          </div>
-        </div>
+          )
+        })}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -326,7 +315,14 @@ function Reportes() {
               />
             </div>
             <div className="flex items-end">
-              <button className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentPage(1)
+                  toast.success('Filtros aplicados')
+                }}
+                className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
                 <Filter size={18} />
                 Aplicar Filtros
               </button>
@@ -337,7 +333,7 @@ function Reportes() {
         <div className="p-4 md:p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-6">Reportes Disponibles</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredReports.map((report) => {
+            {paginatedReports.map((report) => {
               const Icon = report.icon
               return (
                 <div
@@ -376,6 +372,14 @@ function Reportes() {
               )
             })}
           </div>
+          <Pagination
+              page={currentPage}
+              totalPages={totalPages}
+              onChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              totalItems={filteredReports.length}
+            />
         </div>
       </div>
 

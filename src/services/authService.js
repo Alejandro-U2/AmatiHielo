@@ -1,5 +1,5 @@
 const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'mock'
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '')
 
 const TOKEN_KEY = 'amati_token'
 const USER_KEY = 'amati_user'

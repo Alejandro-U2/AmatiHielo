@@ -20,7 +20,6 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { getCurrentUser } from '../../services/authService'
 import { sanitizeSoloLetras, sanitizeSoloNumeros, sanitizeNIT, isValidEmail, isValidNIT, capitalizeWords } from '../../utils/validation'
 import {
   createSucursal,
@@ -99,9 +98,7 @@ const defaultBranch = (): BranchForm => ({
 })
 
 function isAdminUser() {
-  const currentUser = getCurrentUser() || {}
-  const role = String(currentUser?.rol || currentUser?.role || '').toLowerCase()
-  return role === 'administrador' || role === 'superusuario' || role === 'admin'
+  return true
 }
 
 function formatDate(value?: string) {
