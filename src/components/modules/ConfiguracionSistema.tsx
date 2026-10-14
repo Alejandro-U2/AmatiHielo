@@ -575,15 +575,15 @@ export default function ConfiguracionSistema() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-cyan-900 to-blue-900 p-6 md:p-8 text-white shadow-xl">
+      <div className="relative isolate overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 p-6 text-slate-900 shadow-sm md:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-800">
               <Settings2 size={14} />
               ERP / Administración global
             </div>
             <h3 className="text-2xl md:text-3xl font-bold">Configuración del Sistema</h3>
-            <p className="mt-2 max-w-2xl text-sm text-cyan-100">
+            <p className="mt-2 max-w-2xl text-sm text-slate-600">
               Administra parámetros generales, sucursales, impuestos, notificaciones y umbrales desde una sola pantalla.
             </p>
           </div>
@@ -1025,7 +1025,7 @@ function ToggleCard({
   compact?: boolean
 }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className={`w-full rounded-2xl border px-4 py-4 text-left transition ${checked ? 'border-cyan-200 bg-cyan-50' : 'border-slate-200 bg-white hover:bg-slate-50'} ${compact ? 'h-full' : ''}`}>
+    <button type="button" onClick={() => onChange(!checked)} className={`w-full rounded-2xl border px-4 py-4 text-left transition ${checked ? 'border-cyan-100 bg-cyan-50' : 'border-slate-200 bg-white hover:bg-slate-50'} ${compact ? 'h-full' : ''}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="font-semibold text-slate-900">{title}</p>

@@ -6,8 +6,8 @@ export interface PredictionIngredient {
   id: number
   quantity: number
   inventoryProductId: number | null
-  stock: number
-  minimumStock: number
+  stock: number | null
+  minimumStock: number | null
 }
 
 export interface PredictionProduct {
@@ -26,20 +26,24 @@ export interface DemandPrediction {
   productCategory: string
   averageSale: number
   last30DaysSales: number
-  nextWeekPrediction: number
-  suggestedProduction: number
-  availableStock: number
-  recommendedStock: number
+  nextWeekPrediction: number | null
+  suggestedProduction: number | null
+  availableStock: number | null
+  recommendedStock: number | null
   confidence: number
   trend: 'up' | 'down' | 'stable'
   keyFactor: string
   stockRisk: boolean
   growthRate: number
+  salesDays: number
+  hasEnoughSales: boolean
+  hasStockData: boolean
 }
 
 export interface PredictionSummary {
   expectedDemand: number
   suggestedProduction: number
+  productsWithoutStockData: number
   highGrowthProducts: number
   stockoutRiskProducts: number
   operationalRisk: 'Bajo' | 'Medio' | 'Alto'
@@ -47,18 +51,27 @@ export interface PredictionSummary {
 
 export interface DemandPredictionResult {
   predictions: DemandPrediction[]
+  periodStart: string
+  periodEnd: string
   summary: PredictionSummary
   chartData: Array<{
     product: string
-    last30DaysSales: number
+    weeklySalesBaseline: number
     nextWeekPrediction: number
-    suggestedProduction: number
+    suggestedProduction: number | null
     availableStock: number
   }>
 }
 
 function toIsoDate(value: string): string {
-  return new Date(value).toISOString().slice(0, 10)
+  return formatDateLocal(new Date(value))
+}
+
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function round(value: number, decimals = 0): number {
@@ -109,19 +122,22 @@ function getWeatherFactor(day: ForecastDay): { factor: number; reason: string } 
   }
 }
 
-function getProductCapacity(product: PredictionProduct): number {
-  if (!product.ingredients.length) return 0
+function getProductCapacity(product: PredictionProduct): number | null {
+  if (!product.ingredients.length || product.ingredients.some((ingredient) => (
+    ingredient.inventoryProductId === null || ingredient.stock === null || ingredient.quantity <= 0
+  ))) return null
 
   const capacities = product.ingredients
     .filter((ingredient) => ingredient.quantity > 0)
     .map((ingredient) => Math.floor(ingredient.stock / ingredient.quantity))
 
-  return capacities.length ? Math.max(0, Math.min(...capacities)) : 0
+  return capacities.length ? Math.max(0, Math.min(...capacities)) : null
 }
 
 function hasLowIngredientStock(product: PredictionProduct): boolean {
   return product.ingredients.some((ingredient) => (
-    ingredient.minimumStock > 0 && ingredient.stock <= ingredient.minimumStock
+    ingredient.minimumStock !== null && ingredient.minimumStock > 0
+      && ingredient.stock !== null && ingredient.stock <= ingredient.minimumStock
   ))
 }
 
@@ -217,8 +233,8 @@ export async function getPredictionProducts(): Promise<PredictionProduct[]> {
       id: Number(ingredient.id),
       quantity: Number(ingredient.cantidad || 0),
       inventoryProductId: ingredient.producto_id === null ? null : Number(ingredient.producto_id),
-      stock: Number(ingredient.producto?.stock || 0),
-      minimumStock: Number(ingredient.producto?.minimo || 0),
+      stock: ingredient.producto?.stock == null ? null : Number(ingredient.producto.stock),
+      minimumStock: ingredient.producto?.minimo == null ? null : Number(ingredient.producto.minimo),
     })),
   }))
 }
@@ -233,8 +249,16 @@ export function generateDemandPredictions({
   products: PredictionProduct[]
 }): DemandPredictionResult {
   const salesByProduct = groupSalesByProduct(sales)
-  const forecastDays = forecast?.days?.slice(0, 7) || []
-  const hasWeather = forecastDays.length > 0
+  const weatherDays = forecast?.days?.slice(0, 7) || []
+  const periodDays = weatherDays.length
+    ? weatherDays
+    : Array.from({ length: 7 }, (_, index) => {
+      const date = new Date()
+      date.setDate(date.getDate() + index)
+      return { date: formatDateLocal(date) }
+    })
+  const weatherByDate = new Map(weatherDays.map((day) => [day.date, day]))
+  const hasWeather = weatherDays.length > 0
 
   const predictions = products.map((product) => {
     const rows = salesByProduct.get(product.id) || []
@@ -244,19 +268,27 @@ export function generateDemandPredictions({
     const averageSale = last30DaysSales / 30
     const availableStock = getProductCapacity(product)
     const stockRisk = hasLowIngredientStock(product)
-    let weatherReason = 'sin clima disponible'
+    const salesDays = dailySales.size
+    const hasEnoughSales = salesDays >= 5
+    const hasStockData = availableStock !== null
+    let weatherReason = hasWeather ? 'clima estable' : 'clima no disponible; solo tendencia histórica'
 
-    const nextWeekPrediction = forecastDays.reduce((sum, day) => {
+    const nextWeekPrediction = periodDays.reduce((sum, day) => {
       const weekdayAverage = getSameWeekdayAverage(rows, day.date)
       const baseDemand = weekdayAverage > 0 ? (weekdayAverage * 0.6) + (averageSale * 0.4) : averageSale
-      const weather = getWeatherFactor(day)
+      const forecastDay = weatherByDate.get(day.date)
+      const weather = forecastDay
+        ? getWeatherFactor(forecastDay)
+        : { factor: 1, reason: 'clima no disponible; solo tendencia histórica' }
       weatherReason = weather.reason !== 'clima estable' ? weather.reason : weatherReason
       return sum + (baseDemand * weather.factor)
     }, 0)
 
     const projectedDemand = Math.max(0, round(nextWeekPrediction))
     const recommendedStock = Math.ceil(projectedDemand * 1.15)
-    const suggestedProduction = Math.max(0, recommendedStock - availableStock)
+    const suggestedProduction = hasEnoughSales && hasStockData
+      ? Math.max(0, recommendedStock - availableStock)
+      : null
     const growthRate = last30DaysSales > 0
       ? ((projectedDemand - (last30DaysSales / 30 * 7)) / (last30DaysSales / 30 * 7)) * 100
       : 0
@@ -269,26 +301,37 @@ export function generateDemandPredictions({
       productCategory: product.category,
       averageSale: round(averageSale, 2),
       last30DaysSales: round(last30DaysSales, 2),
-      nextWeekPrediction: projectedDemand,
+      nextWeekPrediction: hasEnoughSales ? projectedDemand : null,
       suggestedProduction,
       availableStock,
-      recommendedStock,
+      recommendedStock: hasEnoughSales ? recommendedStock : null,
       confidence: calculateConfidence({
         dataPoints: dailySales.size,
         dailyValues,
         hasWeather,
       }),
       trend,
-      keyFactor: stockRisk ? 'Stock bajo en BOM' : weatherReason,
-      stockRisk: stockRisk || availableStock < projectedDemand,
+      keyFactor: !hasEnoughSales
+        ? `Historial insuficiente: ${salesDays} de 5 días con ventas requeridos`
+        : !hasStockData
+          ? 'Stock de ingredientes incompleto; no se sugiere producción'
+          : stockRisk
+            ? 'Stock bajo en ingredientes de receta'
+            : weatherReason,
+      stockRisk: stockRisk || (availableStock !== null && availableStock < projectedDemand),
       growthRate: round(growthRate, 1),
+      salesDays,
+      hasEnoughSales,
+      hasStockData,
     }
   })
 
-  const expectedDemand = predictions.reduce((sum, item) => sum + item.nextWeekPrediction, 0)
-  const suggestedProduction = predictions.reduce((sum, item) => sum + item.suggestedProduction, 0)
-  const stockoutRiskProducts = predictions.filter((item) => item.stockRisk).length
-  const highGrowthProducts = predictions.filter((item) => item.growthRate > 10).length
+  const reliablePredictions = predictions.filter((item) => item.hasEnoughSales)
+  const expectedDemand = reliablePredictions.reduce((sum, item) => sum + (item.nextWeekPrediction || 0), 0)
+  const suggestedProduction = reliablePredictions.reduce((sum, item) => sum + (item.suggestedProduction || 0), 0)
+  const productsWithoutStockData = reliablePredictions.filter((item) => !item.hasStockData).length
+  const stockoutRiskProducts = reliablePredictions.filter((item) => item.hasStockData && item.stockRisk).length
+  const highGrowthProducts = reliablePredictions.filter((item) => item.growthRate > 10).length
   const operationalRisk = stockoutRiskProducts > 2 || suggestedProduction > expectedDemand * 0.6
     ? 'Alto'
     : stockoutRiskProducts > 0 || suggestedProduction > expectedDemand * 0.3
@@ -296,20 +339,23 @@ export function generateDemandPredictions({
       : 'Bajo'
 
   return {
-    predictions: predictions.sort((a, b) => b.nextWeekPrediction - a.nextWeekPrediction),
+    predictions: predictions.sort((a, b) => (b.nextWeekPrediction || 0) - (a.nextWeekPrediction || 0)),
+    periodStart: periodDays[0]?.date || formatDateLocal(new Date()),
+    periodEnd: periodDays[periodDays.length - 1]?.date || formatDateLocal(new Date()),
     summary: {
       expectedDemand,
       suggestedProduction,
+      productsWithoutStockData,
       highGrowthProducts,
       stockoutRiskProducts,
       operationalRisk,
     },
-    chartData: predictions.map((item) => ({
+    chartData: reliablePredictions.map((item) => ({
       product: item.productName,
-      last30DaysSales: item.last30DaysSales,
-      nextWeekPrediction: item.nextWeekPrediction,
+      weeklySalesBaseline: round(item.averageSale * 7),
+      nextWeekPrediction: item.nextWeekPrediction || 0,
       suggestedProduction: item.suggestedProduction,
-      availableStock: item.availableStock,
+      availableStock: item.availableStock || 0,
     })),
   }
 }

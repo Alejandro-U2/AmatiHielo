@@ -160,7 +160,7 @@ export async function updateCliente(req, res) {
 
 export async function listVentas(req, res) {
   try {
-    const { data: ventas, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('venta_pos')
       .select(`
         id,
@@ -192,7 +192,18 @@ export async function listVentas(req, res) {
         )
       `)
       .order('created_at', { ascending: false })
-      .limit(100)
+
+    const desde = typeof req.query.desde === 'string' ? req.query.desde.trim() : ''
+    const hasta = typeof req.query.hasta === 'string' ? req.query.hasta.trim() : ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(desde)) query = query.gte('created_at', `${desde}T00:00:00-06:00`)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+      const [year, month, day] = hasta.split('-').map(Number)
+      const nextDay = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+      query = query.lt('created_at', `${nextDay}T00:00:00-06:00`)
+    }
+    if (!desde && !hasta && req.query.todos !== 'true') query = query.limit(100)
+
+    const { data: ventas, error } = await query
 
     if (error) {
       return buildErrorResponse(res, error, 'No fue posible cargar las ventas.')

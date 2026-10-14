@@ -21,6 +21,7 @@ import ReporteModal from '../../components/ReporteModal'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
+import ModuleHeader from '../ModuleHeader'
 
 function costoUnitarioEfectivo(ing) {
   const costoUnitario = Number(ing.costoUnitario ?? 0)
@@ -631,11 +632,7 @@ function ProduccionRecetas() {
 
   return (
     <div className="p-4 md:p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2">Recetas de Venta (BOM)</h2>
-        <p className="text-sm md:text-base text-gray-600">Cada producto de venta consume directamente sus materias primas al venderse en POS</p>
-      </div>
+      <ModuleHeader title="Recetas de Venta (BOM)" description="Cada producto de venta consume directamente sus materias primas al venderse en POS" eyebrow="Producción" />
 
       {/* Tabs Navigation */}
       <div className="mb-6 border-b border-gray-200 overflow-x-auto">

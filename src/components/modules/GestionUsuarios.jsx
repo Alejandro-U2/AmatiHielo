@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clock3,
   Eye,
+  FileDown,
   Mail,
   MapPin,
   Pencil,
@@ -15,6 +16,8 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+import ReporteModal from '../../components/ReporteModal'
+import ModuleHeader from '../ModuleHeader'
 import {
   createCompleteUser,
   deleteUserProfile,
@@ -25,6 +28,8 @@ import {
   listUsers,
   updateUserProfile,
 } from '../../services/usersService'
+import { generarReporteModulo } from '../../utils/moduloExport'
+import { toast } from 'sonner'
 
 const NAME_REGEX = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/
 const MIN_PASSWORD_LENGTH = 6
@@ -82,6 +87,8 @@ function GestionUsuarios({ currentUserId }) {
   const [isSaving, setIsSaving] = useState(false)
   const [modalError, setModalError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [reporteOpen, setReporteOpen] = useState(false)
+  const [generandoReporte, setGenerandoReporte] = useState(false)
 
   const fetchUsers = async () => {
     setIsLoading(true)
@@ -159,6 +166,52 @@ function GestionUsuarios({ currentUserId }) {
       return matchesRole && matchesSearch
     })
   }, [usuarios, filterRole, searchTerm])
+
+  const estadosReporte = useMemo(() => [
+    { value: '', label: 'Todos los estados', count: usuarios.length },
+    ...estados.map((estado) => ({
+      value: estado.nombre,
+      label: estado.nombre,
+      count: usuarios.filter((user) => user.estado === estado.nombre).length,
+    })),
+  ], [usuarios, estados])
+
+  const handleGenerarReporteUsuarios = async (estado = '') => {
+    try {
+      setGenerandoReporte(true)
+      const rows = estado ? usuarios.filter((user) => user.estado === estado) : usuarios
+      await generarReporteModulo({
+        fileName: 'reporte_usuarios.pdf',
+        title: 'REPORTE DE USUARIOS DEL SISTEMA',
+        columns: [
+          { key: 'nombre', label: 'NOMBRE', width: 42, align: 'left' },
+          { key: 'usuario', label: 'USUARIO', width: 32, align: 'left' },
+          { key: 'email', label: 'CORREO', width: 48, align: 'left' },
+          { key: 'rol', label: 'ROL', width: 30, align: 'center' },
+          { key: 'estado', label: 'ESTADO', width: 25, align: 'center' },
+          { key: 'ultimoAcceso', label: 'ÚLTIMO ACCESO', width: 36, align: 'center' },
+        ],
+        rows: rows.map((user) => ({
+          nombre: user.nombre || '-',
+          usuario: user.usuario || '-',
+          email: user.email || '-',
+          rol: user.rol || '-',
+          estado: user.estado || '-',
+          ultimoAcceso: user.ultimoAcceso || '-',
+        })),
+        totalLabel: 'TOTAL DE USUARIOS',
+        totalValue: rows.length,
+        filterLabel: estado || 'Todos los estados',
+        note: 'Listado de usuarios, roles, estado de acceso y último ingreso al sistema.',
+      })
+      toast.success('Reporte de usuarios generado correctamente.')
+      setReporteOpen(false)
+    } catch (error) {
+      toast.error(error.message || 'No fue posible generar el reporte.')
+    } finally {
+      setGenerandoReporte(false)
+    }
+  }
 
   const handleOpenModal = (type, user = null) => {
     setModalType(type)
@@ -321,7 +374,7 @@ function GestionUsuarios({ currentUserId }) {
     }
 
     if (selectedUser.id === currentUserId) {
-      setModalError('No puedes eliminar tu propio usuario.')
+      setModalError('No puedes desactivar tu propio usuario.')
       return
     }
 
@@ -332,9 +385,9 @@ function GestionUsuarios({ currentUserId }) {
       await deleteUserProfile(selectedUser.id)
       await fetchUsers()
       handleCloseModal()
-      setSuccessMessage('Usuario eliminado correctamente.')
+      setSuccessMessage('Usuario desactivado correctamente.')
     } catch (error) {
-      setModalError(error.message || 'No fue posible eliminar el usuario.')
+      setModalError(error.message || 'No fue posible desactivar el usuario.')
       setIsSaving(false)
     }
   }
@@ -396,13 +449,16 @@ function GestionUsuarios({ currentUserId }) {
   return (
     <div>
       {/* Header con acciones */}
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-1">Gestión de Usuarios</h3>
-            <p className="text-sm text-gray-600">Administra los usuarios y sus permisos en el sistema</p>
-          </div>
+      <ModuleHeader title="Gestion de Usuarios" description="Administra los usuarios y sus permisos en el sistema" eyebrow="Seguridad y acceso" icon={UserRound}>
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setReporteOpen(true)}
+              className="bg-indigo-600 text-white px-5 py-3 rounded-lg hover:bg-indigo-700 transition-colors shadow-md font-medium flex items-center justify-center gap-2"
+            >
+              <FileDown size={18} aria-hidden="true" />
+              <span>Reporte</span>
+            </button>
             <button
               onClick={() => handleOpenModal('add')}
               className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium flex items-center justify-center space-x-2"
@@ -419,8 +475,7 @@ function GestionUsuarios({ currentUserId }) {
               <span>Recargar</span>
             </button>
           </div>
-        </div>
-      </div>
+      </ModuleHeader>
 
       {/* Filtros y búsqueda */}
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
@@ -570,7 +625,7 @@ function GestionUsuarios({ currentUserId }) {
                       <button
                         onClick={() => handleOpenModal('delete', usuario)}
                         disabled={usuario.id === currentUserId}
-                        title={usuario.id === currentUserId ? 'No puedes eliminar tu propio usuario' : 'Eliminar'}
+                        title={usuario.id === currentUserId ? 'No puedes desactivar tu propio usuario' : 'Desactivar'}
                         className="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Trash2 size={16} aria-hidden="true" />
@@ -584,7 +639,7 @@ function GestionUsuarios({ currentUserId }) {
         </div>
       </div>
 
-      {/* Modal para agregar/editar/eliminar usuario */}
+      {/* Modal para agregar/editar/desactivar usuario */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-white/70">
@@ -601,7 +656,7 @@ function GestionUsuarios({ currentUserId }) {
                       {modalType === 'add' && 'Nuevo Usuario'}
                       {modalType === 'edit' && 'Editar Usuario'}
                       {modalType === 'view' && 'Detalle del Usuario'}
-                      {modalType === 'delete' && 'Eliminar Usuario'}
+                      {modalType === 'delete' && 'Desactivar Usuario'}
                     </h3>
                   </div>
                 </div>
@@ -906,13 +961,13 @@ function GestionUsuarios({ currentUserId }) {
                     </div>
                   )}
                   <div className="bg-red-50 rounded-lg p-4 mb-6">
-                    <p className="text-gray-700 mb-2">¿Estás seguro de que deseas eliminar al usuario?</p>
+                    <p className="text-gray-700 mb-2">¿Estás seguro de que deseas desactivar al usuario?</p>
                     <p className="font-bold text-gray-800">{selectedUser?.nombre}</p>
                     <p className="text-sm text-gray-600">@{selectedUser?.usuario}</p>
                   </div>
                   <p className="text-sm text-red-600 mb-6 flex items-center gap-2">
                     <AlertTriangle size={16} aria-hidden="true" />
-                    Esta acción no se puede deshacer.
+                    El usuario conservará su historial, pero ya no podrá iniciar sesión.
                   </p>
                   <div className="flex space-x-3">
                     <button
@@ -929,7 +984,7 @@ function GestionUsuarios({ currentUserId }) {
                       onClick={handleDeleteUser}
                       className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white py-3 rounded-lg hover:from-red-600 hover:to-red-700 transition-all shadow-md font-medium"
                     >
-                      {isSaving ? 'Eliminando...' : 'Eliminar Usuario'}
+                      {isSaving ? 'Desactivando...' : 'Desactivar Usuario'}
                     </button>
                   </div>
                 </div>
@@ -958,6 +1013,16 @@ function GestionUsuarios({ currentUserId }) {
           </div>
         </div>
       )}
+
+      <ReporteModal
+        open={reporteOpen}
+        title="Reporte de usuarios"
+        filterLabel="estado"
+        filterOptions={estadosReporte}
+        generating={generandoReporte}
+        onGenerate={handleGenerarReporteUsuarios}
+        onClose={() => setReporteOpen(false)}
+      />
     </div>
   )
 }

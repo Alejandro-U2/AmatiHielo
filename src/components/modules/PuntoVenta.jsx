@@ -25,6 +25,7 @@ import SortableHeader from '../../components/SortableHeader'
 import ReporteModal from '../../components/ReporteModal'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
+import ModuleHeader from '../ModuleHeader'
 
 function getLatestSundayBoundary(referenceDate = new Date()) {
   const boundary = new Date(referenceDate)
@@ -556,10 +557,7 @@ function PuntoVenta() {
         })}
       </div>
 
-      <div className="mb-6 mt-6">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2">Punto de Venta (POS)</h2>
-        <p className="text-gray-600">Venta con consumo directo de materias primas desde el BOM</p>
-      </div>
+      <ModuleHeader title="Punto de Venta (POS)" description="Venta con consumo directo de materias primas desde el BOM" eyebrow="Ventas" icon={ReceiptText} />
 
       <div className="mb-6 border-b border-gray-200">
         <nav className="flex space-x-4 overflow-x-auto whitespace-nowrap">

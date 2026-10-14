@@ -355,7 +355,7 @@ export function buildRecommendationPanelData(forecast: WeatherForecast | null): 
     }))
   }
 
-  if (!recommendations.length) {
+  if (!recommendations.length && current) {
     recommendations.push(buildRecommendation({
       id: 'operations-stable-plan',
       titulo: 'Mantener operación planificada',

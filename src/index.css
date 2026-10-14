@@ -29,6 +29,15 @@
   transform: rotate(-15deg);
 }
 
+.dashboard-kpi::after {
+  z-index: 0;
+}
+
+.dashboard-kpi > .min-w-0 {
+  position: relative;
+  z-index: 2;
+}
+
 .dashboard-kpi-icon {
   position: relative;
   z-index: 1;

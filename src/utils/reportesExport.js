@@ -493,3 +493,10 @@ export async function generateReportExcel({
 
   XLSX.writeFile(workbook, `${reportTitle.replace(/\s+/g, '_').toLowerCase()}.xlsx`)
 }
+
+export function generateTableReportExcel({ fileName, sheetName = 'Reporte', rows = [] }) {
+  const workbook = XLSX.utils.book_new()
+  const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Mensaje: 'No hay datos suficientes para generar este reporte.' }])
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31))
+  XLSX.writeFile(workbook, fileName)
+}

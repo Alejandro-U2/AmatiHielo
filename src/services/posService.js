@@ -80,8 +80,13 @@ function normalizeVenta(row = {}) {
   }
 }
 
-export async function listVentasPos() {
-  const payload = await request('/api/pos/venta')
+export async function listVentasPos({ desde, hasta, todos = false } = {}) {
+  const query = new URLSearchParams()
+  if (desde) query.set('desde', desde)
+  if (hasta) query.set('hasta', hasta)
+  if (todos) query.set('todos', 'true')
+  const queryString = query.toString()
+  const payload = await request(`/api/pos/venta${queryString ? `?${queryString}` : ''}`)
   return (payload?.data || []).map(normalizeVenta)
 }
 

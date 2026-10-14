@@ -378,15 +378,15 @@ export default function MantenimientoDatos() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-cyan-900 to-blue-900 p-6 md:p-8 text-white shadow-xl">
+      <div className="relative isolate overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 p-6 text-slate-900 shadow-sm md:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-800">
               <Database size={14} />
               ERP / Administración de estructura
             </div>
             <h3 className="text-2xl md:text-3xl font-bold">Mantenimiento de datos</h3>
-            <p className="mt-2 max-w-2xl text-sm text-cyan-100">
+            <p className="mt-2 max-w-2xl text-sm text-slate-600">
               Administra la estructura lógica de tablas, campos y definiciones del sistema desde una sola pantalla.
             </p>
           </div>

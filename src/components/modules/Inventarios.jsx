@@ -33,6 +33,7 @@ import {
   updateProductoInventario,
 } from '../../services/inventarioService'
 import Pagination from '../../components/Pagination'
+import ModuleHeader from '../ModuleHeader'
 import SortableHeader from '../../components/SortableHeader'
 import ReporteModal from '../../components/ReporteModal'
 import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
@@ -822,13 +823,8 @@ function Inventarios() {
           )}
 
           {/* Header */}
-          <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-800 mb-1">Catálogo de Artículos</h3>
-                <p className="text-sm text-gray-600">Control de productos, materia prima y suministros</p>
-              </div>
-              <div className="flex gap-2">
+          <ModuleHeader title="Cat&#225;logo de Art&#237;culos" description="Control de productos, materia prima y suministros" eyebrow="Inventario" icon={Package}>
+<div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setReporteOpen(true)}
@@ -852,8 +848,7 @@ function Inventarios() {
                   <span>Recargar</span>
                 </button>
               </div>
-            </div>  
-          </div>
+</ModuleHeader>
 
           {/* Estadísticas y filtros */}
             <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 mb-6">
@@ -1031,8 +1026,8 @@ function Inventarios() {
       {/* Contenido del Tab - Movimientos */}
       {activeTab === 'movimientos' && (
         <>
-          <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-            <h3 className="text-2xl font-bold text-gray-800 mb-4">Movimientos de Bodega</h3>
+          <div className="relative isolate overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 p-5 shadow-sm sm:p-7">
+            <h3 className="text-2xl font-bold text-slate-900 mb-4">Movimientos de Bodega</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <button
                 onClick={() => handleOpenModal('entrada')}
@@ -1187,7 +1182,7 @@ function Inventarios() {
       {/* Contenido del Tab - Proveedores */}
       {activeTab === 'proveedores' && (
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="relative isolate overflow-hidden border-b border-cyan-200 bg-gradient-to-r from-cyan-100 via-sky-50 to-blue-100 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h3 className="text-2xl font-bold text-gray-800">Proveedores</h3>
               <p className="text-sm text-gray-600 mt-1">Registra a quién se compra para seleccionar el proveedor en cada Entrada.</p>
@@ -1252,8 +1247,8 @@ function Inventarios() {
       {/* Contenido del Tab - Alertas */}
       {activeTab === 'alertas' && (
         <div className="space-y-4">
-          <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-xl shadow-lg p-6 text-white mb-6">
-            <h3 className="text-2xl font-bold mb-2 flex items-center gap-2"><Bell size={24} aria-hidden="true" />Alertas de Reabastecimiento</h3>
+          <div className="relative isolate overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 p-6 text-slate-900 shadow-sm mb-6">
+            <h3 className="text-2xl font-bold text-slate-900 mb-2 flex items-center gap-2"><Bell size={24} aria-hidden="true" />Alertas de Reabastecimiento</h3>
             <p>Productos que requieren atención inmediata por bajo stock</p>
           </div>
 
@@ -1521,7 +1516,7 @@ function Inventarios() {
                     </div>
                   </div>
 
-                  <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+                  <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4">
                     <label className="block text-sm font-semibold text-cyan-800 mb-2">Costo unitario calculado</label>
                     <div className="text-2xl font-bold text-cyan-700">
                       Q{calcularCostoUnitario().toFixed(2)}

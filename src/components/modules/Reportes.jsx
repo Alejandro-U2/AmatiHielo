@@ -15,9 +15,12 @@ import { getCurrentUser } from '../../services/authService'
 import { listVentasPos } from '../../services/posService'
 import { listProductosInventario, listMovimientosInventario } from '../../services/inventarioService'
 import { getRecetas } from '../../services/recetasService'
+import { getHistoricalSales } from '../../services/salesService'
+import { generateDemandPredictions, getPredictionProducts } from '../../services/predictionService'
 import { buildReportData } from '../../utils/reportesUtils'
-import { generateGenericReportPdf, generateReportExcel, generateSalesReportPdf } from '../../utils/reportesExport'
+import { generateGenericReportPdf, generateReportExcel, generateSalesReportPdf, generateTableReportExcel } from '../../utils/reportesExport'
 import Pagination from '../../components/Pagination'
+import ModuleHeader from '../ModuleHeader'
 
 const reports = [
   {
@@ -54,7 +57,7 @@ const reports = [
   },
   {
     id: 5,
-    name: 'Predicciones IA - Semanal',
+    name: 'Estimaciones de demanda semanal (reglas)',
     category: 'IA Predictiva',
     description: 'Proyecciones de demanda y recomendaciones',
     icon: TrendingUp,
@@ -141,6 +144,56 @@ function Reportes() {
         userName: currentUser?.nombre || currentUser?.username || currentUser?.email || 'Administrador',
         dateFrom,
         dateTo,
+      }
+
+      if (report.id === 5) {
+        const [predictionProducts, historicalSales] = await Promise.all([
+          getPredictionProducts(),
+          getHistoricalSales(30),
+        ])
+        const result = generateDemandPredictions({ forecast: null, sales: historicalSales, products: predictionProducts })
+        const rows = result.predictions
+          .filter((prediction) => prediction.hasEnoughSales)
+          .map((prediction) => ({
+            Producto: prediction.productName,
+            'Promedio semanal (30 días)': Math.round(prediction.averageSale * 7),
+            'Estimación (7 días)': prediction.nextWeekPrediction,
+            Tendencia: prediction.trend === 'up' ? 'Al alza' : prediction.trend === 'down' ? 'A la baja' : 'Estable',
+            'Confianza estimada': `${prediction.confidence}%`,
+            Motivo: prediction.keyFactor,
+          }))
+
+        if (format === 'PDF') {
+          await generateGenericReportPdf({
+            fileName: `${fileBase}.pdf`,
+            title: report.name.toUpperCase(),
+            subtitle: 'Estimaciones calculadas con ventas históricas y reglas de negocio',
+            logoUrl: logoAmati,
+            userName: commonMeta.userName,
+            periodLabel: 'Historial de ventas de los últimos 30 días; sin ajuste climático',
+            columns: [
+              { key: 'Producto', label: 'PRODUCTO', width: 38, align: 'left' },
+              { key: 'Promedio semanal (30 días)', label: 'PROM. SEMANAL (30D)', width: 32, align: 'center' },
+              { key: 'Estimación (7 días)', label: 'ESTIMACIÓN (7D)', width: 28, align: 'center' },
+              { key: 'Tendencia', label: 'TENDENCIA', width: 25, align: 'center' },
+              { key: 'Confianza estimada', label: 'CONF. ESTIMADA', width: 28, align: 'center' },
+              { key: 'Motivo', label: 'FACTOR CLAVE', width: 45, align: 'left' },
+            ],
+            rows,
+            totalLabel: 'ESTIMACIONES CON DATOS SUFICIENTES',
+            totalValue: rows.length,
+            note: 'Estimaciones por reglas, no por un modelo entrenado. Solo se incluyen productos con ventas en al menos cinco días distintos. La confianza es heurística, no precisión medida.',
+          })
+        } else {
+          generateTableReportExcel({
+            fileName: `${fileBase}.xlsx`,
+            sheetName: 'Estimaciones',
+            rows,
+          })
+        }
+
+        toast.success(`Exportación completada: ${report.name}`)
+        return
       }
 
       if (format === 'PDF') {
@@ -248,6 +301,7 @@ function Reportes() {
 
   return (
     <div className="dashboard-shell">
+      <ModuleHeader title="Reportes" description="Consulta y genera reportes operativos de ventas, inventario, producción y demanda" eyebrow="Análisis e información" icon={FileText} />
       <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
         {[
           { label: 'Reportes disponibles', value: String(reports.length), change: '+3', detail: 'reportes activos', icon: FileText, tone: 'blue' },

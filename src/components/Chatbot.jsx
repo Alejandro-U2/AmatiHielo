@@ -1,13 +1,14 @@
 import { createContext, createElement, useContext, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, ArrowUp, BarChart3, CloudSun, FileText, PackageCheck, TrendingUp, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowUp, BarChart3, CloudSun, FileText, PackageCheck, Trash2, TrendingUp, X } from 'lucide-react'
 import IceCubeAssistant from './IceCube'
 import logoAmati from '../assets/logo-amati.jpg'
 import { generateGenericReportPdf } from '../utils/reportesExport'
 import { generateSalesReportPdf } from '../utils/reportesExport'
 import { buildReportData } from '../utils/reportesUtils'
-import { listVentasPos } from '../services/posService'
-import { listProductosInventario, listMovimientosInventario } from '../services/inventarioService'
+import { listVentasPos, listClientesPos } from '../services/posService'
+import { listProductosInventario, listMovimientosInventario, listProveedoresInventario } from '../services/inventarioService'
 import { getRecetas } from '../services/recetasService'
+import { listUsers } from '../services/usersService'
 import { getHistoricalSales } from '../services/salesService'
 import { getPredictionProducts, generateDemandPredictions } from '../services/predictionService'
 import { getCurrentUser } from '../services/authService'
@@ -28,6 +29,160 @@ const quickQuestions = [
   '¿Qué productos están bajo mínimo?',
   'Generar reporte de inventario',
 ]
+
+function getReportDateRange(reportKey, message = '') {
+  const normalized = String(message).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const now = new Date()
+  const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const rangeForMonth = (year, monthIndex) => ({
+    desde: formatDate(new Date(year, monthIndex, 1)),
+    hasta: formatDate(new Date(year, monthIndex + 1, 0)),
+  })
+  const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+  const isoDate = normalized.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/)
+  const numericDate = normalized.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](20\d{2}))?\b/)
+  const namedDay = normalized.match(new RegExp(`\\b(\\d{1,2})\\s+de\\s+(${months.join('|')})(?:\\s+(20\\d{2}))?\\b`))
+  let selectedDate = null
+
+  if (isoDate) selectedDate = new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]))
+  else if (numericDate) selectedDate = new Date(Number(numericDate[3] || now.getFullYear()), Number(numericDate[2]) - 1, Number(numericDate[1]))
+  else if (namedDay) selectedDate = new Date(Number(namedDay[3] || now.getFullYear()), months.indexOf(namedDay[2]), Number(namedDay[1]))
+
+  const expectedDay = isoDate ? Number(isoDate[3]) : numericDate ? Number(numericDate[1]) : Number(namedDay?.[1])
+  const expectedMonth = isoDate ? Number(isoDate[2]) - 1 : numericDate ? Number(numericDate[2]) - 1 : months.indexOf(namedDay?.[2])
+  if (selectedDate && !Number.isNaN(selectedDate.getTime()) && selectedDate.getDate() === expectedDay && selectedDate.getMonth() === expectedMonth) {
+    const day = formatDate(selectedDate)
+    return { desde: day, hasta: day }
+  }
+
+  const monthMatch = normalized.match(new RegExp(`\\b(${months.join('|')})\\b`))
+  if (monthMatch) {
+    const yearMatch = normalized.match(/\b20\d{2}\b/)
+    return rangeForMonth(Number(yearMatch?.[0] || now.getFullYear()), months.indexOf(monthMatch[1]))
+  }
+
+  const dayMatch = normalized.match(/\b(?:dia|del dia)\s+(\d{1,2})\b/)
+  if (dayMatch) {
+    const selected = new Date(now.getFullYear(), now.getMonth(), Number(dayMatch[1]))
+    if (selected.getDate() === Number(dayMatch[1])) {
+      const day = formatDate(selected)
+      return { desde: day, hasta: day }
+    }
+  }
+
+  if (reportKey === 'sales_daily' || (reportKey === 'sales_history' && /\b(dia|diario|hoy)\b/.test(normalized))) {
+    const targetDay = /\bayer\b/.test(normalized) ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) : now
+    const day = formatDate(targetDay)
+    return { desde: day, hasta: day }
+  }
+  if (reportKey === 'sales_monthly' || reportKey === 'sales_history') return rangeForMonth(now.getFullYear(), now.getMonth())
+  return { desde: '', hasta: '' }
+}
+
+async function generateChatbotTableReport({ key, message, userName }) {
+  const period = getReportDateRange(key, message)
+  const normalized = String(message).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const asksActive = /\bactiv[oa]s?\b/.test(normalized)
+  const asksInactive = /\binactiv[oa]s?\b/.test(normalized)
+  const statusFilter = asksActive && asksInactive ? '' : asksInactive ? 'inactivo' : asksActive ? 'activo' : ''
+  const movementType = /\bmermas?\b/.test(normalized) ? 'Merma' : /\bsalidas?\b/.test(normalized) ? 'Salida' : /\bentradas?\b/.test(normalized) ? 'Entrada' : ''
+  const metadata = {
+    logoUrl: logoAmati,
+    userName,
+    periodLabel: period.desde && period.hasta ? `${period.desde} - ${period.hasta}` : 'Todos los registros disponibles',
+  }
+  const downloadTable = (fileName, title, subtitle, columns, rows, totalLabel, note) => generateGenericReportPdf({
+    ...metadata,
+    fileName,
+    title,
+    subtitle,
+    columns,
+    rows,
+    totalLabel,
+    totalValue: rows.length,
+    note,
+  })
+
+  if (key === 'users') {
+    const users = await listUsers()
+    const filtered = statusFilter ? users.filter((user) => String(user.estado || '').toLowerCase() === statusFilter) : users
+    return downloadTable('reporte_de_usuarios.pdf', 'Reporte de Usuarios', statusFilter ? `Estado: ${statusFilter}` : 'Usuarios registrados', [
+      { key: 'nombre', label: 'NOMBRE', width: 46 }, { key: 'usuario', label: 'USUARIO', width: 32 },
+      { key: 'email', label: 'CORREO', width: 48 }, { key: 'rol', label: 'ROL', width: 28 }, { key: 'estado', label: 'ESTADO', width: 24 },
+    ], filtered.map((user) => ({ nombre: user.nombre, usuario: user.usuario, email: user.email, rol: user.rol, estado: user.estado })), 'USUARIOS', 'Incluye únicamente los usuarios que coinciden con el filtro solicitado.')
+  }
+
+  if (key === 'item_catalog' || key === 'inventory') {
+    const products = await listProductosInventario()
+    const columns = key === 'inventory' ? [
+      { key: 'codigo', label: 'CÓDIGO', width: 28 }, { key: 'nombre', label: 'ARTÍCULO', width: 58 },
+      { key: 'categoria', label: 'CATEGORÍA', width: 34 }, { key: 'stock', label: 'STOCK', width: 26 },
+      { key: 'minimo', label: 'MÍNIMO', width: 26 },
+    ] : [
+      { key: 'codigo', label: 'CÓDIGO', width: 30 }, { key: 'nombre', label: 'ARTÍCULO', width: 58 },
+      { key: 'categoria', label: 'CATEGORÍA', width: 34 }, { key: 'precioCompra', label: 'COSTO UNITARIO', width: 28 },
+      { key: 'precioVenta', label: 'PRECIO VENTA', width: 28 },
+    ]
+    return downloadTable(key === 'inventory' ? 'reporte_de_inventario.pdf' : 'catalogo_de_articulos.pdf', key === 'inventory' ? 'Reporte de Inventario' : 'Catálogo de Artículos', 'Artículos registrados en bodega', columns, products.map((product) => ({
+      codigo: product.codigo || '-', nombre: product.nombre, categoria: product.categoria || '-',
+      stock: product.stock, minimo: product.minimo, precioCompra: `Q${Number(product.precioCompra || 0).toFixed(2)}`,
+      precioVenta: `Q${Number(product.precioVenta || 0).toFixed(2)}`,
+    })), 'ARTÍCULOS', 'Datos obtenidos del catálogo de inventario.')
+  }
+
+  if (key === 'movements') {
+    const movements = await listMovimientosInventario({ tipo: movementType || undefined, ...period })
+    return downloadTable('reporte_de_movimientos_de_bodega.pdf', 'Movimientos de Bodega', movementType ? `Tipo: ${movementType}` : 'Entradas, salidas y mermas', [
+      { key: 'fecha', label: 'FECHA', width: 30 }, { key: 'tipo', label: 'TIPO', width: 22 },
+      { key: 'producto', label: 'ARTÍCULO', width: 38 }, { key: 'cantidad', label: 'CANTIDAD', width: 22 },
+      { key: 'motivo', label: 'MOTIVO', width: 44 }, { key: 'usuario', label: 'USUARIO', width: 26 },
+    ], movements.map((row) => ({ fecha: row.fecha, tipo: row.tipo, producto: row.producto, cantidad: row.cantidad, motivo: row.motivo, usuario: row.usuario })), 'MOVIMIENTOS', 'El reporte puede filtrarse por entrada, salida o merma.')
+  }
+
+  if (key === 'suppliers') {
+    const suppliers = await listProveedoresInventario()
+    return downloadTable('reporte_de_proveedores.pdf', 'Reporte de Proveedores', 'Proveedores registrados', [
+      { key: 'codigo', label: 'CÓDIGO', width: 25 }, { key: 'nombre', label: 'PROVEEDOR', width: 45 },
+      { key: 'nit', label: 'NIT', width: 30 }, { key: 'telefono', label: 'TELÉFONO', width: 30 },
+      { key: 'correo', label: 'CORREO', width: 52 },
+    ], suppliers.map((row) => ({ ...row, codigo: row.codigo || '-', nit: row.nit || '-', telefono: row.telefono || '-', correo: row.correo || '-' })), 'PROVEEDORES', 'Listado obtenido del módulo de inventario.')
+  }
+
+  if (key === 'recipes') {
+    const recipes = await getRecetas()
+    return downloadTable('reporte_de_recetas_de_venta.pdf', 'Recetas de Venta', 'Costos y precios de venta registrados', [
+      { key: 'codigo', label: 'CÓDIGO', width: 24 }, { key: 'nombre', label: 'RECETA', width: 40 },
+      { key: 'presentacion', label: 'PRESENTACIÓN', width: 30 }, { key: 'costoTotal', label: 'COSTO', width: 25 },
+      { key: 'precioVenta', label: 'PRECIO VENTA', width: 28 }, { key: 'margen', label: 'MARGEN %', width: 20 },
+    ], recipes.map((row) => ({ codigo: row.codigo, nombre: row.nombre, presentacion: row.presentacion || '-', costoTotal: `Q${Number(row.costoTotal || 0).toFixed(2)}`, precioVenta: `Q${Number(row.precioVenta || 0).toFixed(2)}`, margen: `${Number(row.margen || 0).toFixed(1)}%` })), 'RECETAS', 'Datos obtenidos de las recetas de venta registradas.')
+  }
+
+  if (key === 'frequent_clients') {
+    const [clients, sales] = await Promise.all([listClientesPos(), listVentasPos({ todos: true })])
+    const stats = new Map()
+    sales.forEach((sale) => {
+      const name = sale.nombreCliente || sale.cliente || 'Cliente General'
+      if (!sale.clienteId && !sale.nombreCliente && name.toLowerCase() === 'cliente general') return
+      const id = sale.clienteId || name.toLowerCase()
+      const current = stats.get(id) || { nombre: name, compras: 0, total: 0, ultimaCompra: sale.createdAt }
+      current.compras += 1
+      current.total += Number(sale.total || 0)
+      if (new Date(sale.createdAt) > new Date(current.ultimaCompra)) current.ultimaCompra = sale.createdAt
+      stats.set(id, current)
+    })
+    const clientNames = new Map(clients.map((client) => [client.id, client.nombre]))
+    const rows = [...stats.entries()].filter(([, value]) => value.compras > 1).map(([id, value]) => ({
+      nombre: clientNames.get(id) || value.nombre, compras: value.compras, total: `Q${value.total.toFixed(2)}`,
+      ultimaCompra: value.ultimaCompra ? new Date(value.ultimaCompra).toLocaleDateString('es-GT') : '-',
+    })).sort((a, b) => b.compras - a.compras)
+    return downloadTable('reporte_de_clientes_frecuentes.pdf', 'Clientes Frecuentes', 'Clientes con más de una compra registrada', [
+      { key: 'nombre', label: 'CLIENTE', width: 72 }, { key: 'compras', label: 'COMPRAS', width: 30 },
+      { key: 'total', label: 'VENTAS ACUMULADAS', width: 42 }, { key: 'ultimaCompra', label: 'ÚLTIMA COMPRA', width: 40 },
+    ], rows, 'CLIENTES FRECUENTES', 'Frecuencia calculada a partir del historial de ventas disponible.')
+  }
+
+  return false
+}
 
 async function generateInventoryReport(reportPreview) {
   const user = getCurrentUser()
@@ -54,17 +209,23 @@ async function generateInventoryReport(reportPreview) {
   })
 }
 
-async function generateSystemReport(reportKey) {
+async function generateSystemReport(reportKey, message = '') {
   const user = getCurrentUser()
   const userName = user?.nombre || user?.username || user?.email || 'Administrador'
+  if (['users', 'item_catalog', 'inventory', 'movements', 'suppliers', 'recipes', 'frequent_clients'].includes(reportKey)) {
+    await generateChatbotTableReport({ key: reportKey, message, userName })
+    return
+  }
+
+  const dateRange = getReportDateRange(reportKey, message)
   const [sales, products, movementResponse, recipes] = await Promise.all([
-    listVentasPos(),
+    listVentasPos(dateRange),
     listProductosInventario(),
     listMovimientosInventario(),
     getRecetas(),
   ])
   const movements = movementResponse?.data ?? movementResponse
-  const reportData = buildReportData({ sales, products, movements, recipes })
+  const reportData = buildReportData({ sales, products, movements, recipes, ...dateRange })
   const metadata = { logoUrl: logoAmati, userName, periodLabel: reportData.periodLabel }
   const fileName = {
     sales_daily: 'reporte_de_ventas_diario.pdf',
@@ -73,6 +234,31 @@ async function generateSystemReport(reportKey) {
     production: 'reporte_de_produccion.pdf',
     cash_closing: 'reporte_de_cierre_de_caja.pdf',
   }[reportKey] || 'reporte.pdf'
+
+  if (reportKey === 'sales_history') {
+    await generateGenericReportPdf({
+      fileName: 'historial_de_ventas.pdf',
+      title: 'Historial de Ventas',
+      subtitle: 'Transacciones del período seleccionado',
+      ...metadata,
+      columns: [
+        { key: 'ticket', label: 'TICKET', width: 28 }, { key: 'fecha', label: 'FECHA Y HORA', width: 40 },
+        { key: 'cliente', label: 'CLIENTE', width: 45 }, { key: 'metodo', label: 'MÉTODO DE PAGO', width: 34 },
+        { key: 'total', label: 'TOTAL', width: 30, align: 'right' },
+      ],
+      rows: sales.map((sale) => ({
+        ticket: sale.ticket || '-',
+        fecha: sale.createdAt ? new Date(sale.createdAt).toLocaleString('es-GT') : '-',
+        cliente: sale.nombreCliente || sale.cliente || 'Cliente General',
+        metodo: sale.metodoPago || '-',
+        total: `Q${Number(sale.total || 0).toFixed(2)}`,
+      })),
+      totalLabel: 'VENTAS REGISTRADAS',
+      totalValue: sales.length,
+      note: 'El historial se filtra por el día o mes solicitado. Si no se especifica un período, se muestra el mes actual.',
+    })
+    return
+  }
 
   if (reportKey === 'sales_daily' || reportKey === 'sales_monthly') {
     await generateSalesReportPdf({
@@ -145,27 +331,28 @@ async function generateSystemReport(reportKey) {
       getHistoricalSales(30),
     ])
     const predictionResult = generateDemandPredictions({ forecast: null, sales: historicalSales, products: predictionProducts })
+    const reportablePredictions = predictionResult.predictions.filter((prediction) => prediction.hasEnoughSales)
     await generateGenericReportPdf({
       fileName: 'predicciones_ia_semanal.pdf',
-      title: 'Predicciones IA - Semanal',
-      subtitle: 'Proyecciones de demanda y recomendaciones',
+      title: 'Estimaciones de demanda semanales (reglas)',
+      subtitle: 'Estimaciones calculadas con ventas históricas',
       ...metadata,
       columns: [
         { key: 'producto', label: 'PRODUCTO', width: 42, align: 'left' },
-        { key: 'ventaReal', label: 'VENTA REAL', width: 28, align: 'center' },
-        { key: 'prediccion', label: 'PREDICCIÓN', width: 28, align: 'center' },
-        { key: 'confianza', label: 'CONFIANZA', width: 28, align: 'center' },
+        { key: 'ventaReal', label: 'PROMEDIO SEMANAL (30D)', width: 34, align: 'center' },
+        { key: 'prediccion', label: 'ESTIMACIÓN (7D)', width: 28, align: 'center' },
+        { key: 'confianza', label: 'CONFIANZA ESTIMADA', width: 34, align: 'center' },
         { key: 'factor', label: 'FACTOR CLAVE', width: 50, align: 'left' },
       ],
-      rows: predictionResult.predictions.map((prediction) => ({
+      rows: reportablePredictions.map((prediction) => ({
         producto: prediction.productName,
-        ventaReal: prediction.last30DaysSales,
-        prediccion: prediction.nextWeekPrediction,
-        confianza: `${prediction.confidence}%`,
+        ventaReal: Math.round(prediction.averageSale * 7),
+        prediccion: prediction.nextWeekPrediction ?? 'Datos insuficientes',
+        confianza: `Estimación ${prediction.confidence}%`,
         factor: prediction.keyFactor,
       })),
       totalLabel: 'TOTAL DE PREDICCIONES',
-      totalValue: predictionResult.predictions.length,
+      totalValue: reportablePredictions.length,
       note: 'Proyecciones calculadas con datos de ventas reales. El cálculo desde el chatbot usa el historial disponible y no agrega condiciones climáticas.',
     })
     return
@@ -196,6 +383,7 @@ function ChatbotProvider({ children }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [reportGenerating, setReportGenerating] = useState(false)
   const [cubeState, setCubeState] = useState('normal')
 
   const sendMessage = async (rawValue) => {
@@ -214,16 +402,12 @@ function ChatbotProvider({ children }) {
         role: 'assistant',
         type: response.type === 'report_preview' ? 'report' : 'message',
         content: response.message || 'Esta información no está disponible en el sistema.',
-        reportPreview: response.reportPreview,
+        reportPreview: response.reportPreview ? { ...response.reportPreview, requestMessage: content } : null,
       }
       if (response.action === 'generate_inventory_report') {
         const previousReport = [...messages].reverse().find((item) => item.reportPreview)?.reportPreview
         await generateInventoryReport(previousReport)
         assistantMessage = { role: 'assistant', type: 'message', content: 'Reporte de inventario generado y descargado.' }
-      }
-      if (response.action === 'generate_report') {
-        await generateSystemReport(response.reportKey)
-        assistantMessage = { role: 'assistant', type: 'message', content: 'Reporte generado y descargado correctamente.' }
       }
       setMessages((current) => [...current, {
         ...assistantMessage,
@@ -243,19 +427,33 @@ function ChatbotProvider({ children }) {
     }
   }
 
-  const handleReport = async () => {
+  const handleReport = async (reportPreview) => {
+    if (!reportPreview || reportGenerating) return
+    setReportGenerating(true)
     try {
-      const reportPreview = [...messages].reverse().find((item) => item.reportPreview)?.reportPreview
-      await generateInventoryReport(reportPreview)
-      setMessages((current) => [...current, { role: 'assistant', type: 'message', content: 'Reporte de inventario generado.' }])
+      if (reportPreview.reportKey === 'inventory') {
+        await generateInventoryReport(reportPreview)
+      } else {
+        await generateSystemReport(reportPreview.reportKey, reportPreview.requestMessage)
+      }
+      setMessages((current) => [...current, { role: 'assistant', type: 'message', content: 'Reporte generado y descargado correctamente.' }])
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', type: 'error', content: error.message || 'No pude generar el reporte en este momento. Intenta nuevamente.' }])
+    } finally {
+      setReportGenerating(false)
     }
   }
 
+  const clearChat = () => {
+    if (loading) return
+    setMessages([])
+    setInput('')
+    setCubeState('normal')
+  }
+
   const value = {
-    messages, input, setInput, loading, cubeState,
-    sendMessage, handleReport,
+    messages, input, setInput, loading, reportGenerating, cubeState,
+    sendMessage, handleReport, clearChat,
   }
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
@@ -268,7 +466,7 @@ function useChat() {
 }
 
 function ChatHeader({ compact = false, onBack, onClose }) {
-  const { cubeState } = useChat()
+  const { cubeState, messages, loading, clearChat } = useChat()
   return (
     <header className={`flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 ${compact ? 'py-3' : 'py-3.5 sm:px-6'}`}>
       <div className="flex min-w-0 items-center gap-3">
@@ -282,7 +480,20 @@ function ChatHeader({ compact = false, onBack, onClose }) {
           </p>
         </div>
       </div>
-      {onClose && <button type="button" onClick={onClose} aria-label="Cerrar asistente" className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"><X size={19} /></button>}
+      <div className="ml-2 flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={clearChat}
+          disabled={loading || messages.length === 0}
+          aria-label="Limpiar chat"
+          title="Limpiar chat"
+          className="flex h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium text-gray-600 transition hover:bg-red-50 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          <span>Limpiar</span>
+        </button>
+        {onClose && <button type="button" onClick={onClose} aria-label="Cerrar asistente" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"><X size={19} /></button>}
+      </div>
     </header>
   )
 }
@@ -336,7 +547,7 @@ function FormattedResponse({ content }) {
   </div>
 }
 
-function ChatMessage({ message, cubeState = 'normal', onReport }) {
+function ChatMessage({ message, cubeState = 'normal', onReport, reportGenerating = false }) {
   const isUser = message.role === 'user'
   return (
     <div className={`flex items-end gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -346,8 +557,8 @@ function ChatMessage({ message, cubeState = 'normal', onReport }) {
         <div className={`rounded-2xl px-4 py-3 text-left text-sm leading-relaxed ${isUser ? 'rounded-br-md bg-cyan-50 text-gray-800' : 'rounded-bl-md border border-gray-200 bg-white text-gray-700 shadow-sm'}`}>
           <FormattedResponse content={message.content} />
           {message.reportPreview && <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3.5">
-            <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100 text-cyan-700"><BarChart3 size={16} /></span><div><p className="text-xs font-semibold text-gray-800">{message.reportPreview.title}</p><p className="text-[10px] text-gray-500">{message.reportPreview.totalProducts} productos · {message.reportPreview.lowStockProducts} bajo mínimo</p></div></div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-gray-600">¿Deseas generarlo?</span><button type="button" onClick={onReport} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-cyan-500">Generar reporte</button></div>
+            <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100 text-cyan-700"><BarChart3 size={16} /></span><div><p className="text-xs font-semibold text-gray-800">{message.reportPreview.title}</p><p className="text-[10px] text-gray-500">{message.reportPreview.totalProducts != null ? `${message.reportPreview.totalProducts} productos \u00b7 ${message.reportPreview.lowStockProducts} bajo m\u00ednimo` : message.reportPreview.summary}</p></div></div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-gray-600">{'\u00bfDeseas generarlo?'}</span><button type="button" onClick={() => onReport(message.reportPreview)} disabled={reportGenerating} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:cursor-wait disabled:opacity-60">{reportGenerating ? 'Generando\u2026' : 'Generar reporte'}</button></div>
           </div>}
         </div>
       </div>
@@ -363,7 +574,7 @@ function ChatLoadingState() {
 }
 
 function ChatMessages() {
-  const { messages, loading, cubeState, handleReport } = useChat()
+  const { messages, loading, reportGenerating, cubeState, handleReport } = useChat()
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -372,7 +583,7 @@ function ChatMessages() {
   }, [messages, loading])
 
   return <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto bg-gray-50/70 px-4 py-5 sm:px-6 sm:py-6">
-    {messages.map((message, index) => <ChatMessage key={`${message.role}-${index}`} message={message} cubeState={index === messages.length - 1 && message.role === 'assistant' ? cubeState : 'normal'} onReport={handleReport} />)}
+    {messages.map((message, index) => <ChatMessage key={`${message.role}-${index}`} message={message} cubeState={index === messages.length - 1 && message.role === 'assistant' ? cubeState : 'normal'} onReport={handleReport} reportGenerating={reportGenerating} />)}
     {loading && <ChatLoadingState />}
   </div>
 }

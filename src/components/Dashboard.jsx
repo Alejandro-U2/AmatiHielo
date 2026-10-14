@@ -231,7 +231,7 @@ function Dashboard() {
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto min-w-0">
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="border-b border-cyan-200 bg-gradient-to-r from-cyan-100 via-sky-50 to-blue-100 shadow-sm">
           <div className="px-4 py-4 md:px-8 flex items-center gap-3">
             <button
               type="button"
@@ -241,7 +241,7 @@ function Dashboard() {
               <Menu size={22} />
             </button>
             <div>
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-900">
                 {activeModuleInfo?.name}
               </h2>
               <p className="text-sm text-gray-600">

@@ -25,7 +25,7 @@ export function getFixedChatReply(value, role) {
     if (!canRoleUseChatbotIntent(role, 'report')) {
       return 'Puedes consultar el Reporte de Inventario desde el módulo Reportes.'
     }
-    return 'Reportes disponibles en AMATI HIELO:\n1. Reporte de Ventas Diario\n2. Reporte de Inventario\n3. Reporte de Producción\n4. Reporte de Cierre de Caja\n5. Predicciones IA - Semanal\n6. Reporte de Ventas Mensual\n\nPuedes generarlos en PDF o Excel desde el módulo Reportes. Desde este chat también puedes solicitar cualquiera de los seis reportes indicando: Generar reporte de ventas, inventario, producción, cierre de caja, predicciones IA o ventas mensual.'
+    return 'Puedes generar reportes de usuarios (activos o inactivos), inventario, catálogo de artículos, movimientos de bodega (entradas, salidas o mermas), proveedores, recetas de venta, historial de ventas por día o mes y clientes frecuentes. También están disponibles los reportes actuales de producción, cierre de caja e IA. Indica el tipo de reporte y el filtro que necesitas.'
   }
   if (/^(hola|buenos dias|buenas tardes|buenas noches)[!. ]*$/.test(normalized)) {
     return '¿Qué necesitas consultar sobre clima, ventas, inventario o reportes?'

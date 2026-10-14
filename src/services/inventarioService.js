@@ -171,8 +171,13 @@ export async function listMotivosMerma() {
   }))
 }
 
-export async function listMovimientosInventario() {
-  const payload = await request('/api/inventario/movimiento')
+export async function listMovimientosInventario({ tipo, desde, hasta } = {}) {
+  const query = new URLSearchParams()
+  if (tipo) query.set('tipo', tipo)
+  if (desde) query.set('desde', desde)
+  if (hasta) query.set('hasta', hasta)
+  const queryString = query.toString()
+  const payload = await request(`/api/inventario/movimiento${queryString ? `?${queryString}` : ''}`)
   return (payload?.data || []).map(normalizeMovimiento)
 }
 

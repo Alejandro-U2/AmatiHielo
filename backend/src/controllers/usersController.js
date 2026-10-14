@@ -605,18 +605,24 @@ export async function deleteUser(req, res) {
   }
 
   try {
-    const authDeletion = await supabaseAdmin.auth.admin.deleteUser(id)
-    const profileDeletion = await supabaseAdmin
+    const inactiveStateId = await resolveEstadoUsuarioId('Inactivo')
+    const { data: profile, error } = await supabaseAdmin
       .from('perfil')
-      .delete()
+      .update({ estado_usuario_id: inactiveStateId })
       .eq('id', id)
+      .select('id')
+      .maybeSingle()
 
-    if (authDeletion.error && profileDeletion.error) {
-      return buildErrorResponse(res, authDeletion.error || profileDeletion.error, 'No fue posible eliminar el usuario.', 400)
+    if (error) {
+      return buildErrorResponse(res, error, 'No fue posible desactivar el usuario.', 400)
     }
 
-    return res.json({ message: 'Usuario eliminado correctamente.' })
+    if (!profile) {
+      return res.status(404).json({ message: 'No se encontró el usuario.' })
+    }
+
+    return res.json({ message: 'Usuario desactivado correctamente.' })
   } catch (error) {
-    return buildErrorResponse(res, error, 'No fue posible eliminar el usuario.')
+    return buildErrorResponse(res, error, 'No fue posible desactivar el usuario.')
   }
 }

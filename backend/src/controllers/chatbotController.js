@@ -41,7 +41,16 @@ function weatherDescription(code) {
 
 function getRequestedReportKey(message) {
   const normalized = normalizeText(message)
-  if (!/\b(generar|crear|descargar|exportar)\b/.test(normalized) || !/\b(reporte|informe)\b/.test(normalized)) return null
+  // Treat a named report as a generation request even when the user omits
+  // an action verb (for example, "reporte de ventas").
+  if (!/\b(reportes?|informes?)\b/.test(normalized)) return null
+  if (/\b(usuario|usuarios|cuenta|cuentas)\b/.test(normalized)) return 'users'
+  if (/\b(proveedor|proveedores)\b/.test(normalized)) return 'suppliers'
+  if (/\b(clientes? frecuentes|frecuentes clientes|clientes habituales)\b/.test(normalized)) return 'frequent_clients'
+  if (/\bhistorial\b/.test(normalized)) return 'sales_history'
+  if (/\b(catalogo|articulos|articulo|productos)\b/.test(normalized)) return 'item_catalog'
+  if (/\b(movimientos?|bodega|entradas|salidas|mermas?)\b/.test(normalized)) return 'movements'
+  if (/\b(recetas?|formulas?)\b/.test(normalized)) return 'recipes'
   if (/\b(inventario|stock)\b/.test(normalized)) return 'inventory'
   if (/\b(produccion|producción)\b/.test(normalized)) return 'production'
   if (/\b(cierre|caja|arqueo|conciliacion)\b/.test(normalized)) return 'cash_closing'
@@ -65,11 +74,47 @@ export async function sendChatbotMessage(req, res) {
   try {
     const requestedReportKey = getRequestedReportKey(message)
     if (requestedReportKey && requestedReportKey !== 'inventory') {
+      if (!canRoleUseChatbotIntent(req.auth?.profile?.rol, 'report')) {
+        return res.status(403).json({ message: 'Tu rol no tiene permiso para generar este reporte.' })
+      }
+      const reportTitles = {
+        users: 'Reporte de Usuarios',
+        suppliers: 'Reporte de Proveedores',
+        frequent_clients: 'Reporte de Clientes Frecuentes',
+        sales_history: 'Historial de Ventas',
+        item_catalog: 'Catálogo de Artículos',
+        movements: 'Movimientos de Bodega',
+        recipes: 'Recetas de Venta',
+        production: 'Reporte de Producción',
+        cash_closing: 'Reporte de Cierre de Caja',
+        ai_weekly: 'Estimaciones de Demanda Semanal',
+        sales_monthly: 'Reporte de Ventas Mensual',
+        sales_daily: 'Reporte de Ventas Diario',
+      }
+      const normalized = normalizeText(message)
+      const details = requestedReportKey === 'users' && /\binactiv/.test(normalized)
+        ? 'Filtro: usuarios inactivos'
+        : requestedReportKey === 'users' && /\bactiv/.test(normalized)
+          ? 'Filtro: usuarios activos'
+          : requestedReportKey === 'movements' && /\bmerma/.test(normalized)
+            ? 'Filtro: mermas'
+            : requestedReportKey === 'movements' && /\bsalida/.test(normalized)
+              ? 'Filtro: salidas'
+              : requestedReportKey === 'movements' && /\bentrada/.test(normalized)
+                ? 'Filtro: entradas'
+                : requestedReportKey === 'frequent_clients'
+                  ? 'Clientes con más de una compra registrada'
+                  : requestedReportKey === 'sales_history' || requestedReportKey === 'sales_monthly' || requestedReportKey === 'sales_daily'
+                    ? 'Se aplicará el período indicado en tu solicitud'
+                    : 'Datos actuales del sistema'
       return res.json({
-        type: 'report_confirmation',
-        action: 'generate_report',
-        reportKey: requestedReportKey,
-        message: 'Preparando el reporte solicitado para descargarlo.',
+        type: 'report_preview',
+        message: '¿Deseas generar este reporte?',
+        reportPreview: {
+          reportKey: requestedReportKey,
+          title: reportTitles[requestedReportKey] || 'Reporte del sistema',
+          summary: details,
+        },
       })
     }
     const lastAssistantMessage = Array.isArray(history)
@@ -109,6 +154,7 @@ export async function sendChatbotMessage(req, res) {
         type: 'report_preview',
         message: `Reporte de inventario actual: **${formatNumber(products.length)} productos**\nBajo mínimo: ${formatNumber(lowStock.length)} productos\nEn estado crítico: ${formatNumber(criticalStock.length)} productos\n\n¿Deseas generarlo?`,
         reportPreview: {
+          reportKey: 'inventory',
           title: 'Inventario actual',
           generatedAt: new Date().toISOString(),
           totalProducts: products.length,

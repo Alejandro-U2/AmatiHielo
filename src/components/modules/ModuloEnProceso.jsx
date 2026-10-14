@@ -1,15 +1,15 @@
 import { Database } from 'lucide-react'
+import ModuleHeader from '../ModuleHeader'
 
 function ModuloEnProceso({ module: { name, description, features } = {} }) {
   return (
-    <div className="bg-white rounded-xl shadow-md p-8">
+    <div className="space-y-6">
+      <ModuleHeader title={name} description={description} eyebrow="Módulo" icon={Database} />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
       <div className="text-center py-12">
         <div className="mx-auto mb-4 w-20 h-20 rounded-2xl bg-cyan-50 text-cyan-700 flex items-center justify-center">
           <Database size={42} strokeWidth={1.8} />
         </div>
-        <h3 className="text-2xl font-bold text-gray-800 mb-3">{name}</h3>
-        <p className="text-gray-600 mb-6">{description}</p>
-
         {features && (
           <div className="max-w-md mx-auto bg-gray-50 rounded-lg p-6 mt-8">
             <p className="font-semibold text-gray-700 mb-4">Funcionalidades planeadas:</p>
@@ -32,6 +32,7 @@ function ModuloEnProceso({ module: { name, description, features } = {} }) {
             Modulo en Proceso
           </span>
         </div>
+      </div>
       </div>
     </div>
   )

@@ -190,6 +190,13 @@ export async function listMovimientos(req, res) {
       sortColumns: MOVIMIENTO_SORT_COLUMNS,
       defaultSort: 'fecha',
     })
+    const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(params.desde || '') ? `${params.desde}T00:00:00-06:00` : params.desde
+    let untilDate = params.hasta
+    if (/^\d{4}-\d{2}-\d{2}$/.test(params.hasta || '')) {
+      const [year, month, day] = params.hasta.split('-').map(Number)
+      const nextDay = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+      untilDate = `${nextDay}T00:00:00-06:00`
+    }
 
     let productoIds = null
 
@@ -224,11 +231,11 @@ export async function listMovimientos(req, res) {
     if (typeof req.query.tipo === 'string' && req.query.tipo.trim() !== '') {
       query = query.eq('tipo', req.query.tipo.trim())
     }
-    if (params.desde) {
-      query = query.gte('created_at', params.desde)
+    if (fromDate) {
+      query = query.gte('created_at', fromDate)
     }
-    if (params.hasta) {
-      query = query.lte('created_at', params.hasta)
+    if (untilDate) {
+      query = query.lt('created_at', untilDate)
     }
 
     let total = null
@@ -244,11 +251,11 @@ export async function listMovimientos(req, res) {
       if (typeof req.query.tipo === 'string' && req.query.tipo.trim() !== '') {
         countQuery = countQuery.eq('tipo', req.query.tipo.trim())
       }
-      if (params.desde) {
-        countQuery = countQuery.gte('created_at', params.desde)
+      if (fromDate) {
+        countQuery = countQuery.gte('created_at', fromDate)
       }
-      if (params.hasta) {
-        countQuery = countQuery.lte('created_at', params.hasta)
+      if (untilDate) {
+        countQuery = countQuery.lt('created_at', untilDate)
       }
 
       const { count, error: errorCount } = await countQuery
