@@ -443,31 +443,7 @@ function Login() {
           </button>
         </form>
 
-        {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '1.25rem 0 1rem' }}>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-          <span style={{ fontSize: 11, color: 'rgba(160,230,255,0.35)', letterSpacing: 1, textTransform: 'uppercase' }}>¿Sin acceso?</span>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-        </div>
-
-        {/* Footer */}
-        <p style={{ textAlign: 'center', fontSize: 13, color: 'rgba(160,230,255,0.45)', margin: 0 }}>
-          <button
-            type="button"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#38d1f0',
-              cursor: 'pointer',
-              fontFamily: "'Outfit', sans-serif",
-              fontSize: 13,
-              fontWeight: 500,
-              padding: 0,
-            }}
-          >
-            Contacta a tu administrador
-          </button>
-        </p>
+       
       </div>
 
       {/* Modal Olvidé mi contraseña */}
