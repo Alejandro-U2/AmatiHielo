@@ -13,11 +13,15 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  UserCheck,
   UserRound,
+  Users,
   X,
 } from 'lucide-react'
 import ReporteModal from '../../components/ReporteModal'
+import SuccessModal from '../../components/SuccessModal'
 import ModuleHeader from '../ModuleHeader'
+import Pagination from '../Pagination'
 import {
   createCompleteUser,
   deleteUserProfile,
@@ -86,9 +90,12 @@ function GestionUsuarios({ currentUserId }) {
   const [formData, setFormData] = useState(initialFormData)
   const [isSaving, setIsSaving] = useState(false)
   const [modalError, setModalError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [successMessage, setSuccessMessage] = useState('')
   const [reporteOpen, setReporteOpen] = useState(false)
   const [generandoReporte, setGenerandoReporte] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const fetchUsers = async () => {
     setIsLoading(true)
@@ -166,6 +173,23 @@ function GestionUsuarios({ currentUserId }) {
       return matchesRole && matchesSearch
     })
   }, [usuarios, filterRole, searchTerm])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterRole])
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [totalPages, currentPage])
+
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredUsers.slice(start, start + pageSize)
+  }, [filteredUsers, currentPage, pageSize])
 
   const estadosReporte = useMemo(() => [
     { value: '', label: 'Todos los estados', count: usuarios.length },
@@ -276,48 +300,74 @@ function GestionUsuarios({ currentUserId }) {
   const handleSubmitUser = async (event) => {
     event.preventDefault()
 
-    const nameFields = ['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido']
-    const hasAnyName = nameFields.some((field) => formData[field].trim().length > 0)
-    const invalidNameField = nameFields.find((field) => {
-      const value = formData[field].trim()
-      return value.length > 0 && !NAME_REGEX.test(value)
-    })
+    const errors = {}
 
-    if (!hasAnyName || !formData.primerNombre.trim() || !formData.primerApellido.trim()) {
-      setModalError('Primer nombre y primer apellido son obligatorios.')
-      return
+    // Primer nombre y segundo nombre
+    if (!formData.primerNombre.trim()) {
+      errors.primerNombre = 'El primer nombre es obligatorio.'
+    } else if (!NAME_REGEX.test(formData.primerNombre.trim())) {
+      errors.primerNombre = 'Solo se permiten letras, espacios y acentos.'
     }
 
-    if (invalidNameField) {
-      setModalError('Los nombres y apellidos solo pueden contener letras, espacios y acentos.')
-      return
+    if (formData.segundoNombre.trim() && !NAME_REGEX.test(formData.segundoNombre.trim())) {
+      errors.segundoNombre = 'Solo se permiten letras, espacios y acentos.'
     }
 
-    if (!formData.usuario.trim() || !formData.email.trim()) {
-      setModalError('Usuario y email son obligatorios.')
-      return
+    // Primer apellido y segundo apellido
+    if (!formData.primerApellido.trim()) {
+      errors.primerApellido = 'El primer apellido es obligatorio.'
+    } else if (!NAME_REGEX.test(formData.primerApellido.trim())) {
+      errors.primerApellido = 'Solo se permiten letras, espacios y acentos.'
     }
 
+    if (formData.segundoApellido.trim() && !NAME_REGEX.test(formData.segundoApellido.trim())) {
+      errors.segundoApellido = 'Solo se permiten letras, espacios y acentos.'
+    }
+
+    // Nombre de usuario
+    if (!formData.usuario.trim()) {
+      errors.usuario = 'El nombre de usuario es obligatorio.'
+    }
+
+    // Email
+    if (!formData.email.trim()) {
+      errors.email = 'El email es obligatorio.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      errors.email = 'El email no tiene un formato válido.'
+    }
+
+    // Contraseña
+    if (modalType === 'add') {
+      if (!formData.password) {
+        errors.password = 'La contraseña es obligatoria.'
+      } else if (formData.password.length < MIN_PASSWORD_LENGTH) {
+        errors.password = `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`
+      }
+    } else if (modalType === 'edit' && formData.password && formData.password.length < MIN_PASSWORD_LENGTH) {
+      errors.password = `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`
+    }
+
+    // Departamento y Municipio
     if (!formData.departamentoId) {
-      setModalError('El departamento es obligatorio.')
-      return
+      errors.departamentoId = 'El departamento es obligatorio.'
     }
 
     if (!formData.municipioId) {
-      setModalError('El municipio es obligatorio.')
-      return
+      errors.municipioId = 'El municipio es obligatorio.'
     }
 
-    if (modalType === 'add' && formData.password.length < MIN_PASSWORD_LENGTH) {
-      setModalError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`)
-      return
-    }
-
+    // Restricción de auto-desactivación
     if (modalType === 'edit' && selectedUser?.id === currentUserId && formData.estado === 'Inactivo') {
-      setModalError('No puedes desactivar tu propio usuario.')
+      errors.estado = 'No puedes desactivar tu propio usuario.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setModalError('Faltan campos por completar o contienen errores. Por favor revisa los campos en rojo.')
       return
     }
 
+    setFieldErrors({})
     setModalError('')
     setIsSaving(true)
 
@@ -399,83 +449,71 @@ function GestionUsuarios({ currentUserId }) {
     { key: 'primerApellido', label: 'Primer apellido', placeholder: 'Ej: Pérez', required: true },
     { key: 'segundoApellido', label: 'Segundo apellido', placeholder: 'Ej: López', required: false },
   ]
-  const invalidNameField = nameFieldsConfig.find((field) => {
-    const value = formData[field.key].trim()
-    return value.length > 0 && !NAME_REGEX.test(value)
-  })?.key
 
-  const formFieldFlow = [
-    { key: 'primerNombre', required: true, label: 'primer nombre' },
-    { key: 'segundoNombre', required: false, label: 'segundo nombre' },
-    { key: 'primerApellido', required: true, label: 'primer apellido' },
-    { key: 'segundoApellido', required: false, label: 'segundo apellido' },
-    { key: 'usuario', required: true, label: 'el nombre de usuario' },
-    { key: 'email', required: true, label: 'el email' },
-    { key: 'password', required: modalType === 'add', label: 'la contraseña' },
-    { key: 'rol', required: false, label: 'el rol' },
-    { key: 'estado', required: false, label: 'el estado' },
-    { key: 'departamentoId', required: true, label: 'el departamento' },
-    { key: 'municipioId', required: true, label: 'el municipio' },
-  ]
-
-  const isFormFieldEnabled = (fieldKey) => {
-    if (modalType === 'view') return false
-    if (modalType === 'edit') return true
-    const index = formFieldFlow.findIndex((field) => field.key === fieldKey)
-    if (index <= 0) return true
-    for (let i = 0; i < index; i += 1) {
-      const previous = formFieldFlow[i]
-      if (previous.required && formData[previous.key].trim().length === 0) {
-        return false
-      }
+    const getInputClass = (fieldKey) => {
+    const hasError = Boolean(fieldErrors[fieldKey])
+    if (hasError) {
+      return 'w-full px-4 py-2 border-2 border-red-500 bg-red-50/50 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed'
     }
-    return true
-  }
-
-  const getBlockingField = (fieldKey) => {
-    const index = formFieldFlow.findIndex((field) => field.key === fieldKey)
-    if (index <= 0) return null
-    return formFieldFlow
-      .slice(0, index)
-      .find((f) => f.required && formData[f.key].trim().length === 0) || null
-  }
-
-  const blockingHint = (fieldKey) => {
-    const blocking = getBlockingField(fieldKey)
-    if (!blocking) return null
-    return `Llena ${blocking.label} antes de continuar.`
+    return 'w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed'
   }
 
   return (
     <div>
       {/* Header con acciones */}
       <ModuleHeader title="Gestion de Usuarios" description="Administra los usuarios y sus permisos en el sistema" eyebrow="Seguridad y acceso" icon={UserRound}>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setReporteOpen(true)}
-              className="bg-indigo-600 text-white px-5 py-3 rounded-lg hover:bg-indigo-700 transition-colors shadow-md font-medium flex items-center justify-center gap-2"
+              className="flex-1 sm:flex-initial bg-indigo-600 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg hover:bg-indigo-700 transition-colors shadow-md font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5"
             >
-              <FileDown size={18} aria-hidden="true" />
+              <FileDown size={17} aria-hidden="true" />
               <span>Reporte</span>
             </button>
             <button
               onClick={() => handleOpenModal('add')}
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium flex items-center justify-center space-x-2"
+              className="flex-1 sm:flex-initial bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium text-xs sm:text-sm flex items-center justify-center space-x-1.5"
             >
-              <Plus size={18} aria-hidden="true" />
+              <Plus size={17} aria-hidden="true" />
               <span>Nuevo Usuario</span>
             </button>
             <button
               type="button"
               onClick={fetchUsers}
-              className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 transition-all duration-200 shadow-md font-medium flex items-center justify-center space-x-2"
+              className="flex-1 sm:flex-initial bg-gray-300 text-gray-700 px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg hover:bg-gray-400 transition-all duration-200 shadow-md font-medium text-xs sm:text-sm flex items-center justify-center space-x-1.5"
             >
-              <RefreshCw size={18} aria-hidden="true" />
+              <RefreshCw size={17} aria-hidden="true" />
               <span>Recargar</span>
             </button>
           </div>
       </ModuleHeader>
+
+      {/* Estadísticas rápidas */}
+      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 mb-6">
+        {[
+          { label: 'Total Usuarios', value: String(usuarios.length), change: 'Registrados', tone: 'blue', icon: Users, chart: 'dashboard-chart-blue' },
+          { label: 'Usuarios Activos', value: String(usuarios.filter((u) => u.estado === 'Activo').length), change: 'En operación', tone: 'green', icon: UserCheck, chart: 'dashboard-chart-green' },
+          { label: 'Administradores', value: String(usuarios.filter((u) => u.rol === 'Administrador' || u.rol === 'Superusuario').length), change: 'Acceso total', tone: 'purple', icon: ShieldCheck, chart: 'dashboard-chart-purple' },
+          { label: 'Operarios', value: String(usuarios.filter((u) => u.rol === 'Operario').length), change: 'Acceso operativo', tone: 'orange', icon: UserRound, chart: 'dashboard-chart-orange' },
+        ].map((metric) => {
+          const MetricIcon = metric.icon
+
+          return (
+            <div key={metric.label} className={`dashboard-kpi dashboard-tone-${metric.tone}`}>
+              <div className="dashboard-kpi-icon"><MetricIcon size={25} strokeWidth={2.2} /></div>
+              <div className="min-w-0">
+                <p className="dashboard-kpi-label">{metric.label}</p>
+                <p className="dashboard-kpi-value">{metric.value}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="dashboard-kpi-change">{metric.change}</span>
+                </div>
+              </div>
+              <div className={`dashboard-sparkline ${metric.chart}`} aria-hidden="true" />
+            </div>
+          )
+        })}
+      </div>
 
       {/* Filtros y búsqueda */}
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
@@ -512,26 +550,6 @@ function GestionUsuarios({ currentUserId }) {
         </div>
       </div>
 
-      {/* Estadísticas rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md p-5 text-white">
-          <p className="text-sm opacity-90 mb-1">Total Usuarios</p>
-          <p className="text-3xl font-bold">{usuarios.length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-md p-5 text-white">
-          <p className="text-sm opacity-90 mb-1">Usuarios Activos</p>
-          <p className="text-3xl font-bold">{usuarios.filter(u => u.estado === 'Activo').length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-md p-5 text-white">
-          <p className="text-sm opacity-90 mb-1">Administradores</p>
-          <p className="text-3xl font-bold">{usuarios.filter(u => u.rol === 'Administrador' || u.rol === 'Superusuario').length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-md p-5 text-white">
-          <p className="text-sm opacity-90 mb-1">Operarios</p>
-          <p className="text-3xl font-bold">{usuarios.filter(u => u.rol === 'Operario').length}</p>
-        </div>
-      </div>
-
       {loadError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-red-700 text-sm">
           {loadError}
@@ -540,7 +558,7 @@ function GestionUsuarios({ currentUserId }) {
 
       {/* Tabla de usuarios */}
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto touch-scroll">
           <table className="w-full">
             <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
               <tr>
@@ -569,7 +587,7 @@ function GestionUsuarios({ currentUserId }) {
                 </tr>
               )}
 
-              {!isLoading && filteredUsers.map((usuario) => (
+              {!isLoading && paginatedUsers.map((usuario) => (
                 <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center">
@@ -637,6 +655,17 @@ function GestionUsuarios({ currentUserId }) {
             </tbody>
           </table>
         </div>
+        <div className="p-4 border-t border-gray-100">
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            onChange={setCurrentPage}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            totalItems={filteredUsers.length}
+            pageSizeOptions={[5, 10, 25, 50]}
+          />
+        </div>
       </div>
 
       {/* Modal para agregar/editar/desactivar usuario */}
@@ -681,84 +710,87 @@ function GestionUsuarios({ currentUserId }) {
 
                   <div>
                     <p className="block text-sm font-semibold text-gray-700 mb-2">Nombre completo</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {nameFieldsConfig.map((field) => {
-                        const enabled = isFormFieldEnabled(field.key)
-                        return (
-                          <div key={field.key}>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              {field.label} {field.required && <span className="text-red-500">*</span>}
-                            </label>
-                            <input
-                              type="text"
-                              value={formData[field.key]}
-                              onChange={(e) => enabled && handleFormField(field.key, e.target.value)}
-                              placeholder={field.placeholder}
-                              disabled={!enabled}
-                              aria-invalid={invalidNameField === field.key}
-                              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-400"
-                            />
-                            {!enabled && blockingHint(field.key) && (
-                              <p className="mt-1 text-xs text-amber-600">
-                                {blockingHint(field.key)}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      })}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {nameFieldsConfig.map((field) => (
+                        <div key={field.key}>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            {field.label} {field.required && <span className="text-red-500">*</span>}
+                          </label>
+                          <input
+                            type="text"
+                            value={formData[field.key]}
+                            onChange={(e) => handleFormField(field.key, e.target.value)}
+                            placeholder={field.placeholder}
+                            disabled={modalType === 'view'}
+                            aria-invalid={Boolean(fieldErrors[field.key])}
+                            className={getInputClass(field.key)}
+                          />
+                          {fieldErrors[field.key] && (
+                            <p className="mt-1 text-xs text-red-600 font-medium">
+                              {fieldErrors[field.key]}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    {invalidNameField && (
-                      <p className="mt-1 text-sm text-red-600">
-                        Los nombres y apellidos solo pueden contener letras, espacios y acentos.
-                      </p>
-                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre de usuario</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Nombre de usuario <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       value={formData.usuario}
-                      onChange={(e) => isFormFieldEnabled('usuario') && handleFormField('usuario', e.target.value)}
+                      onChange={(e) => handleFormField('usuario', e.target.value)}
                       placeholder="Ej: jperez"
-                      disabled={!isFormFieldEnabled('usuario')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={modalType === 'view'}
+                      aria-invalid={Boolean(fieldErrors.usuario)}
+                      className={getInputClass('usuario')}
                     />
-                    {!isFormFieldEnabled('usuario') && blockingHint('usuario') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('usuario')}</p>
+                    {fieldErrors.usuario && (
+                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.usuario}</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Email <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="email"
                       value={formData.email}
-                      onChange={(e) => isFormFieldEnabled('email') && handleFormField('email', e.target.value)}
+                      onChange={(e) => handleFormField('email', e.target.value)}
                       placeholder="usuario@amati.com"
-                      disabled={!isFormFieldEnabled('email')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={modalType === 'view'}
+                      aria-invalid={Boolean(fieldErrors.email)}
+                      className={getInputClass('email')}
                     />
-                    {!isFormFieldEnabled('email') && blockingHint('email') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('email')}</p>
+                    {fieldErrors.email && (
+                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.email}</p>
                     )}
                   </div>
 
                   {modalType !== 'view' && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        {modalType === 'add' ? 'Contraseña' : 'Contraseña nueva (opcional)'}
+                        {modalType === 'add' ? (
+                          <>Contraseña <span className="text-red-500">*</span></>
+                        ) : (
+                          'Contraseña nueva (opcional)'
+                        )}
                       </label>
                       <input
                         type="password"
                         value={formData.password}
-                        onChange={(e) => isFormFieldEnabled('password') && handleFormField('password', e.target.value)}
+                        onChange={(e) => handleFormField('password', e.target.value)}
                         placeholder={modalType === 'add' ? 'Mínimo 6 caracteres' : 'Deja vacío para no cambiar'}
-                        disabled={!isFormFieldEnabled('password')}
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={modalType === 'view'}
+                        aria-invalid={Boolean(fieldErrors.password)}
+                        className={getInputClass('password')}
                       />
-                      {!isFormFieldEnabled('password') && blockingHint('password') && (
-                        <p className="mt-1 text-xs text-amber-600">{blockingHint('password')}</p>
+                      {fieldErrors.password && (
+                        <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.password}</p>
                       )}
                     </div>
                   )}
@@ -767,9 +799,9 @@ function GestionUsuarios({ currentUserId }) {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Rol</label>
                     <select
                       value={formData.rol}
-                      onChange={(e) => isFormFieldEnabled('rol') && handleFormField('rol', e.target.value)}
-                      disabled={!isFormFieldEnabled('rol')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onChange={(e) => handleFormField('rol', e.target.value)}
+                      disabled={modalType === 'view'}
+                      className={getInputClass('rol')}
                     >
                       {roles.map((role) => (
                         <option key={role.id || role.nombre} value={role.nombre}>
@@ -777,18 +809,15 @@ function GestionUsuarios({ currentUserId }) {
                         </option>
                       ))}
                     </select>
-                    {!isFormFieldEnabled('rol') && blockingHint('rol') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('rol')}</p>
-                    )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Estado</label>
                     <select
                       value={formData.estado}
-                      onChange={(e) => isFormFieldEnabled('estado') && handleFormField('estado', e.target.value)}
-                      disabled={!isFormFieldEnabled('estado')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onChange={(e) => handleFormField('estado', e.target.value)}
+                      disabled={modalType === 'view'}
+                      className={getInputClass('estado')}
                     >
                       {estados.map((estado) => (
                         <option
@@ -800,11 +829,11 @@ function GestionUsuarios({ currentUserId }) {
                         </option>
                       ))}
                     </select>
-                    {!isFormFieldEnabled('estado') && blockingHint('estado') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('estado')}</p>
-                    )}
                     {isEditingSelf && (
                       <p className="mt-1 text-sm text-amber-600">No puedes desactivar tu propio usuario.</p>
+                    )}
+                    {fieldErrors.estado && (
+                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.estado}</p>
                     )}
                   </div>
 
@@ -827,9 +856,10 @@ function GestionUsuarios({ currentUserId }) {
                     </label>
                     <select
                       value={formData.departamentoId}
-                      onChange={(e) => isFormFieldEnabled('departamentoId') && handleFormField('departamentoId', e.target.value)}
-                      disabled={!isFormFieldEnabled('departamentoId')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onChange={(e) => handleFormField('departamentoId', e.target.value)}
+                      disabled={modalType === 'view'}
+                      aria-invalid={Boolean(fieldErrors.departamentoId)}
+                      className={getInputClass('departamentoId')}
                     >
                       <option value="">Selecciona un departamento</option>
                       {departamentos.map((departamento) => (
@@ -838,8 +868,8 @@ function GestionUsuarios({ currentUserId }) {
                         </option>
                       ))}
                     </select>
-                    {!isFormFieldEnabled('departamentoId') && blockingHint('departamentoId') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('departamentoId')}</p>
+                    {fieldErrors.departamentoId && (
+                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.departamentoId}</p>
                     )}
                   </div>
 
@@ -849,19 +879,22 @@ function GestionUsuarios({ currentUserId }) {
                     </label>
                     <select
                       value={formData.municipioId}
-                      onChange={(e) => isFormFieldEnabled('municipioId') && handleFormField('municipioId', e.target.value)}
-                      disabled={!isFormFieldEnabled('municipioId')}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      onChange={(e) => handleFormField('municipioId', e.target.value)}
+                      disabled={modalType === 'view' || !formData.departamentoId}
+                      aria-invalid={Boolean(fieldErrors.municipioId)}
+                      className={getInputClass('municipioId')}
                     >
-                      <option value="">{formData.departamentoId ? 'Selecciona un municipio' : 'Primero selecciona el departamento'}</option>
+                      <option value="">
+                        {formData.departamentoId ? 'Selecciona un municipio' : 'Primero selecciona el departamento'}
+                      </option>
                       {municipios.map((municipio) => (
                         <option key={municipio.id} value={municipio.id}>
                           {municipio.nombre}
                         </option>
                       ))}
                     </select>
-                    {!isFormFieldEnabled('municipioId') && blockingHint('municipioId') && (
-                      <p className="mt-1 text-xs text-amber-600">{blockingHint('municipioId')}</p>
+                    {fieldErrors.municipioId && (
+                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.municipioId}</p>
                     )}
                   </div>
 
@@ -994,25 +1027,11 @@ function GestionUsuarios({ currentUserId }) {
         </div>
       )}
 
-      {successMessage && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-emerald-100 p-7 text-center">
-            <div className="mx-auto mb-5 w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 size={36} strokeWidth={2.2} aria-hidden="true" />
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 mb-2">Operación completada</p>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Cambios guardados</h3>
-            <p className="text-sm text-gray-600 mb-6">{successMessage}</p>
-            <button
-              type="button"
-              onClick={() => setSuccessMessage('')}
-              className="w-full rounded-lg bg-gray-900 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
-            >
-              Aceptar
-            </button>
-          </div>
-        </div>
-      )}
+      <SuccessModal
+        isOpen={Boolean(successMessage)}
+        message={successMessage}
+        onClose={() => setSuccessMessage('')}
+      />
 
       <ReporteModal
         open={reporteOpen}

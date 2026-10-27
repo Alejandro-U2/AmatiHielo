@@ -220,3 +220,180 @@ export async function deleteEstructura(req, res) {
     return buildErrorResponse(res, error, 'No fue posible eliminar la tabla.')
   }
 }
+
+function sanitizeRecordPayload(body = {}, campos = []) {
+  const payload = {}
+  const campoMap = new Map(campos.map((c) => [c.nombre, c]))
+
+  for (const [key, val] of Object.entries(body)) {
+    if (key === 'id' || key === 'created_at' || key === 'updated_at') continue
+    const campo = campoMap.get(key)
+    if (!campo) continue
+
+    if (val === null || val === undefined || val === '') {
+      payload[key] = null
+      continue
+    }
+
+    const tipo = campo.tipoDato.toLowerCase()
+    if (tipo === 'boolean') {
+      payload[key] = Boolean(val)
+    } else if (tipo === 'integer' || tipo === 'bigint') {
+      const parsed = parseInt(val, 10)
+      payload[key] = Number.isNaN(parsed) ? null : parsed
+    } else if (tipo === 'numeric') {
+      const parsed = parseFloat(val)
+      payload[key] = Number.isNaN(parsed) ? null : parsed
+    } else {
+      payload[key] = String(val).trim()
+    }
+  }
+
+  return payload
+}
+
+export async function listRegistrosTabla(req, res) {
+  const { id } = req.params
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ message: 'El id de la tabla es obligatorio.' })
+  }
+
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+  const pageSize = Math.max(1, Math.min(100, parseInt(req.query.pageSize, 10) || 20))
+  const search = String(req.query.search || '').trim()
+
+  try {
+    const tabla = await fetchTablaById(Number(id))
+    let query = supabaseAdmin
+      .from(tabla.nombreInterno)
+      .select('*', { count: 'exact' })
+
+    if (search) {
+      const textFields = tabla.campos.filter((c) => c.tipoDato === 'text').map((c) => c.nombre)
+      if (textFields.length > 0) {
+        const orClause = textFields.map((f) => `${f}.ilike.%${search}%`).join(',')
+        query = query.or(orClause)
+      }
+    }
+
+    const hasOrden = tabla.campos.some((c) => c.nombre === 'orden')
+    if (hasOrden) {
+      query = query.order('orden', { ascending: true })
+    } else {
+      query = query.order('id', { ascending: true })
+    }
+
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+    query = query.range(from, to)
+
+    const { data, count, error } = await query
+
+    if (error) {
+      return buildErrorResponse(res, error, 'No fue posible consultar los registros de la tabla.')
+    }
+
+    return res.json({
+      data: data || [],
+      total: count || 0,
+      page,
+      pageSize,
+      campos: tabla.campos,
+    })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible consultar los registros de la tabla.')
+  }
+}
+
+export async function createRegistroTabla(req, res) {
+  const { id } = req.params
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ message: 'El id de la tabla es obligatorio.' })
+  }
+
+  try {
+    const tabla = await fetchTablaById(Number(id))
+    const payload = sanitizeRecordPayload(req.body, tabla.campos)
+
+    for (const campo of tabla.campos) {
+      if (campo.requerido && (payload[campo.nombre] === null || payload[campo.nombre] === undefined)) {
+        return res.status(400).json({
+          message: `El campo "${campo.nombre}" es obligatorio.`,
+        })
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from(tabla.nombreInterno)
+      .insert(payload)
+      .select()
+      .single()
+
+    if (error) {
+      return buildErrorResponse(res, error, 'No fue posible crear el registro.')
+    }
+
+    return res.status(201).json({
+      data,
+      message: 'Registro creado exitosamente.',
+    })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible crear el registro.')
+  }
+}
+
+export async function updateRegistroTabla(req, res) {
+  const { id, registroId } = req.params
+  if (!id || Number.isNaN(Number(id)) || !registroId) {
+    return res.status(400).json({ message: 'Id de tabla y registro son obligatorios.' })
+  }
+
+  try {
+    const tabla = await fetchTablaById(Number(id))
+    const payload = sanitizeRecordPayload(req.body, tabla.campos)
+
+    const { data, error } = await supabaseAdmin
+      .from(tabla.nombreInterno)
+      .update(payload)
+      .eq('id', registroId)
+      .select()
+      .single()
+
+    if (error) {
+      return buildErrorResponse(res, error, 'No fue posible actualizar el registro.')
+    }
+
+    return res.json({
+      data,
+      message: 'Registro actualizado exitosamente.',
+    })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible actualizar el registro.')
+  }
+}
+
+export async function deleteRegistroTabla(req, res) {
+  const { id, registroId } = req.params
+  if (!id || Number.isNaN(Number(id)) || !registroId) {
+    return res.status(400).json({ message: 'Id de tabla y registro son obligatorios.' })
+  }
+
+  try {
+    const tabla = await fetchTablaById(Number(id))
+
+    const { error } = await supabaseAdmin
+      .from(tabla.nombreInterno)
+      .delete()
+      .eq('id', registroId)
+
+    if (error) {
+      return buildErrorResponse(res, error, 'No fue posible eliminar el registro.')
+    }
+
+    return res.json({
+      message: 'Registro eliminado exitosamente.',
+    })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible eliminar el registro.')
+  }
+}

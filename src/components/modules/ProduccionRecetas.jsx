@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FileDown, RefreshCw, X } from 'lucide-react'
+import { BookOpen, Calculator, Factory, FileDown, ImagePlus, Layers, Package, RefreshCw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   getRecetas,
@@ -22,6 +22,143 @@ import { generarReporteModulo } from '../../utils/moduloExport'
 import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
 import ModuleHeader from '../ModuleHeader'
+import SuccessModal from '../SuccessModal'
+
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve('')
+    if (file.size > 3 * 1024 * 1024) {
+      return reject(new Error('La imagen no debe superar los 3MB.'))
+    }
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('No fue posible leer la imagen seleccionada.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function RecetaImageField({ value, onChange }) {
+  const [dragOver, setDragOver] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+  const [showUrlField, setShowUrlField] = useState(false)
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const dataUrl = await readImageFile(file)
+      onChange(dataUrl)
+    } catch (err) {
+      toast.error(err.message || 'Error al procesar la imagen')
+    }
+  }
+
+  const handleApplyUrl = () => {
+    if (!urlInput.trim()) return
+    onChange(urlInput.trim())
+    setUrlInput('')
+    setShowUrlField(false)
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-gray-700">Foto del Producto (POS)</label>
+      {value ? (
+        <div className="relative group w-full h-40 rounded-xl border-2 border-cyan-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+          <img
+            src={value}
+            alt="Vista previa"
+            className="w-full h-full object-contain"
+          />
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-md transition-colors"
+            >
+              <Trash2 size={14} /> Quitar imagen
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={async (e) => {
+            e.preventDefault()
+            setDragOver(false)
+            const file = e.dataTransfer.files?.[0]
+            if (file) {
+              try {
+                const dataUrl = await readImageFile(file)
+                onChange(dataUrl)
+              } catch (err) {
+                toast.error(err.message || 'Error al procesar la imagen')
+              }
+            }
+          }}
+          className={`border-2 border-dashed rounded-xl p-3 text-center transition-colors ${
+            dragOver ? 'border-cyan-500 bg-cyan-50/60' : 'border-gray-300 hover:border-cyan-400 bg-gray-50/50'
+          }`}
+        >
+          <div className="flex flex-col items-center justify-center gap-1.5">
+            <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center">
+              <ImagePlus size={18} />
+            </div>
+            <div className="text-xs text-gray-600">
+              <label className="text-cyan-600 font-semibold cursor-pointer hover:underline">
+                <span>Subir foto</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </label>
+              {' '}o arrastra aquí (máx 3MB)
+            </div>
+            <div className="pt-0.5">
+              {!showUrlField ? (
+                <button
+                  type="button"
+                  onClick={() => setShowUrlField(true)}
+                  className="text-xs text-gray-500 hover:text-cyan-600 underline"
+                >
+                  O pegar URL web
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input
+                    type="url"
+                    placeholder="https://ejemplo.com/foto.jpg"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    className="text-xs px-2.5 py-1 border border-gray-300 rounded-lg focus:ring-1 focus:ring-cyan-500 w-48"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyUrl}
+                    className="text-xs px-2.5 py-1 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 font-medium"
+                  >
+                    OK
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowUrlField(false); setUrlInput('') }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function costoUnitarioEfectivo(ing) {
   const costoUnitario = Number(ing.costoUnitario ?? 0)
@@ -82,6 +219,7 @@ function ProduccionRecetas() {
     nombre: '',
     categoria: 'Bebidas',
     presentacion: '',
+    imagenUrl: '',
 
     costoElectricidad: '',
     costoManoObra: '',
@@ -251,7 +389,7 @@ function ProduccionRecetas() {
       setLoading(true)
       setErrorMsg('')
       const [recetasData, categoriasData, presentacionesData, unidadesData] = await Promise.all([
-        getRecetas(),
+        getRecetas({ includeImages: true }),
         listCategoriasReceta().catch(() => []),
         listPresentacionesReceta().catch(() => []),
         listUnidadesMedida().catch(() => []),
@@ -314,6 +452,7 @@ function ProduccionRecetas() {
         nombre: '',
         categoria: 'Bebidas',
         presentacion: '',
+        imagenUrl: '',
     
         costoElectricidad: '',
         costoManoObra: '',
@@ -355,6 +494,7 @@ function ProduccionRecetas() {
       nombre: '',
       categoria: 'Bebidas',
       presentacion: '',
+      imagenUrl: '',
   
       costoElectricidad: '',
       costoManoObra: '',
@@ -463,6 +603,8 @@ function ProduccionRecetas() {
         ...(costosReceta || {}),
         ingredientes: (prev.ingredientes || []).filter(i => i.id !== ingredienteId),
       }))
+
+      setSuccessMsg('Ingrediente eliminado correctamente.')
     } catch (error) {
       setErrorMsg(error.message || 'Error al eliminar ingrediente.')
     } finally {
@@ -518,7 +660,7 @@ function ProduccionRecetas() {
         costoLocal: bomCostosForm.costoLocal,
         precioVenta: bomCostosForm.precioVenta,
       })
-      const recetasActualizadas = await getRecetas()
+      const recetasActualizadas = await getRecetas({ includeImages: true })
       const nuevaReceta = recetasActualizadas.find((r) => r.id === selectedReceta.id)
       setRecetas(recetasActualizadas)
       if (nuevaReceta) {
@@ -565,6 +707,7 @@ function ProduccionRecetas() {
         nombre: recetaForm.nombre,
         categoria: recetaForm.categoria,
         presentacion: recetaForm.presentacion,
+        imagenUrl: recetaForm.imagenUrl || null,
         costoElectricidad: recetaForm.costoElectricidad ? Number(recetaForm.costoElectricidad) : 0,
         costoManoObra: recetaForm.costoManoObra ? Number(recetaForm.costoManoObra) : 0,
         costoAgua: recetaForm.costoAgua ? Number(recetaForm.costoAgua) : 0,
@@ -631,17 +774,43 @@ function ProduccionRecetas() {
   }
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="space-y-6">
       <ModuleHeader title="Recetas de Venta (BOM)" description="Cada producto de venta consume directamente sus materias primas al venderse en POS" eyebrow="Producción" />
 
+      {/* Estadísticas rápidas */}
+      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5 mb-6">
+        {[
+          { label: 'Recetas Registradas', value: String(recetas.length), change: 'Catálogo activo', tone: 'blue', icon: BookOpen, chart: 'dashboard-chart-blue' },
+          { label: 'Fichas con BOM', value: String(recetas.filter((r) => (r.ingredientes?.length || 0) > 0).length), change: 'Consumo directo POS', tone: 'green', icon: Factory, chart: 'dashboard-chart-green' },
+          { label: 'Costo Promedio', value: `Q${(recetas.length ? recetas.reduce((s, r) => s + (Number(r.costoTotal) || 0), 0) / recetas.length : 0).toFixed(2)}`, change: 'Por unidad de venta', tone: 'purple', icon: Calculator, chart: 'dashboard-chart-purple' },
+          { label: 'Categorías', value: String(categoriasReceta.length), change: 'Clasificaciones', tone: 'orange', icon: Layers, chart: 'dashboard-chart-orange' },
+        ].map((metric) => {
+          const MetricIcon = metric.icon
+
+          return (
+            <div key={metric.label} className={`dashboard-kpi dashboard-tone-${metric.tone}`}>
+              <div className="dashboard-kpi-icon"><MetricIcon size={25} strokeWidth={2.2} /></div>
+              <div className="min-w-0">
+                <p className="dashboard-kpi-label">{metric.label}</p>
+                <p className="dashboard-kpi-value">{metric.value}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="dashboard-kpi-change">{metric.change}</span>
+                </div>
+              </div>
+              <div className={`dashboard-sparkline ${metric.chart}`} aria-hidden="true" />
+            </div>
+          )
+        })}
+      </div>
+
       {/* Tabs Navigation */}
-      <div className="mb-6 border-b border-gray-200 overflow-x-auto">
-        <nav className="flex space-x-4 whitespace-nowrap">
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto scrollbar-none touch-scroll whitespace-nowrap">
           <button
             onClick={() => setActiveTab('recetas')}
-            className={`pb-3 px-2 font-medium transition-colors ${
+            className={`pb-3 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-colors shrink-0 ${
               activeTab === 'recetas'
-                ? 'border-b-2 border-cyan-500 text-cyan-600'
+                ? 'border-b-2 border-cyan-500 text-cyan-600 font-semibold'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -649,9 +818,9 @@ function ProduccionRecetas() {
           </button>
           <button
             onClick={() => setActiveTab('costeo')}
-            className={`pb-3 px-2 font-medium transition-colors ${
+            className={`pb-3 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-colors shrink-0 ${
               activeTab === 'costeo'
-                ? 'border-b-2 border-cyan-500 text-cyan-600'
+                ? 'border-b-2 border-cyan-500 text-cyan-600 font-semibold'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -663,19 +832,19 @@ function ProduccionRecetas() {
       {/* Tab: Catálogo de Recetas */}
       {activeTab === 'recetas' && (
         <div>
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
-            <div className="flex flex-col sm:flex-row gap-2 flex-1 sm:max-w-xl">
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full lg:max-w-xl">
               <input
                 type="text"
                 placeholder="Buscar receta..."
                 value={searchTermReceta}
                 onChange={(e) => setSearchTermReceta(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-sm"
+                className="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-sm"
               />
               <select
                 value={filterCategoria}
                 onChange={(e) => setFilterCategoria(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-sm"
+                className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-sm bg-white"
               >
                 <option value="todos">Todas las categorías</option>
                 {categoriasReceta.map((categoria) => (
@@ -696,11 +865,11 @@ function ProduccionRecetas() {
                 </button>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start sm:justify-end">
               <button
                 type="button"
                 onClick={() => setReporteOpen(true)}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow text-sm whitespace-nowrap flex items-center gap-2 justify-center"
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-shadow text-xs sm:text-sm whitespace-nowrap flex items-center gap-1.5 justify-center shadow-xs"
               >
                 <FileDown size={16} aria-hidden="true" />
                 Reporte
@@ -712,14 +881,14 @@ function ProduccionRecetas() {
                   setProdReloadKey((key) => key + 1)
                 }}
                 disabled={loading}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm whitespace-nowrap flex items-center gap-2 justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-xs sm:text-sm whitespace-nowrap flex items-center gap-1.5 justify-center disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
               >
-                <RefreshCw size={16} aria-hidden="true" />
+                <RefreshCw size={16} aria-hidden="true" className={loading ? 'animate-spin' : ''} />
                 Recargar
               </button>
               <button
                 onClick={() => openModal('addReceta')}
-                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-shadow text-sm whitespace-nowrap"
+                className="flex-1 sm:flex-none px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-shadow text-xs sm:text-sm whitespace-nowrap font-medium text-center shadow-xs"
               >
                 + Nueva Receta
               </button>
@@ -727,7 +896,7 @@ function ProduccionRecetas() {
           </div>
 
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-scroll">
             <table className="min-w-full">
               <thead className="bg-gradient-to-r from-cyan-50 to-blue-50">
                 <tr>
@@ -747,7 +916,26 @@ function ProduccionRecetas() {
                   <tr key={receta.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 md:px-6 py-3 md:py-4 text-sm font-medium text-gray-900 hidden sm:table-cell">{receta.codigo}</td>
                     <td className="px-4 md:px-6 py-3 md:py-4">
-                      <div className="text-sm font-medium text-gray-900">{receta.nombre}</div>
+                      <div className="flex items-center gap-3">
+                        {receta.imagenUrl ? (
+                          <img
+                            src={receta.imagenUrl}
+                            alt={receta.nombre}
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-xs shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+                            <Package className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{receta.nombre}</div>
+                          <div className="text-xs text-gray-500 sm:hidden flex items-center gap-1.5 mt-0.5">
+                            <span>{receta.codigo}</span>
+                            <span className="md:hidden text-cyan-700 font-medium">· {receta.categoria}</span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 md:px-6 py-3 md:py-4 hidden md:table-cell">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold border ${getCategoriaColor(receta.categoria)}`}>
@@ -775,6 +963,7 @@ function ProduccionRecetas() {
                               nombre: receta.nombre,
                               categoria: receta.categoria,
                               presentacion: receta.presentacion,
+                              imagenUrl: receta.imagenUrl || '',
                               costoElectricidad: receta.costoElectricidad ? receta.costoElectricidad.toString() : '',
                               costoManoObra: receta.costoManoObra ? receta.costoManoObra.toString() : '',
                               costoAgua: receta.costoAgua ? receta.costoAgua.toString() : '',
@@ -1095,6 +1284,11 @@ function ProduccionRecetas() {
                   min="0"
                 />
               </div>
+
+              <RecetaImageField
+                value={recetaForm.imagenUrl}
+                onChange={(url) => setRecetaForm({ ...recetaForm, imagenUrl: url })}
+              />
 
               <div className="col-span-2">
                 <h4 className="text-sm font-bold text-gray-700 mb-2">⚙️ Costos de Producción (Q)</h4>
@@ -1580,6 +1774,11 @@ function ProduccionRecetas() {
                   />
               </div>
 
+              <RecetaImageField
+                value={recetaForm.imagenUrl}
+                onChange={(url) => setRecetaForm({ ...recetaForm, imagenUrl: url })}
+              />
+
               <div>
                 <h4 className="text-sm font-bold text-gray-700 mb-2">⚙️ Costos de Producción (Q)</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1665,6 +1864,7 @@ function ProduccionRecetas() {
                       nombre: recetaForm.nombre,
                       categoria: recetaForm.categoria,
                       presentacion: recetaForm.presentacion,
+                      imagenUrl: recetaForm.imagenUrl || null,
                       costoElectricidad: recetaForm.costoElectricidad ? Number(recetaForm.costoElectricidad) : 0,
                       costoManoObra: recetaForm.costoManoObra ? Number(recetaForm.costoManoObra) : 0,
                       costoAgua: recetaForm.costoAgua ? Number(recetaForm.costoAgua) : 0,
@@ -2025,6 +2225,12 @@ function ProduccionRecetas() {
         generating={generandoReporte}
         onGenerate={handleGenerarReporteRecetas}
         onClose={() => setReporteOpen(false)}
+      />
+
+      <SuccessModal
+        isOpen={Boolean(successMsg)}
+        message={successMsg?.replace(/^[✅\s]+/, '')}
+        onClose={() => setSuccessMsg('')}
       />
     </div>
   )

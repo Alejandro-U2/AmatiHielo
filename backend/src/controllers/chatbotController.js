@@ -55,8 +55,10 @@ function getRequestedReportKey(message) {
   if (/\b(produccion|producción)\b/.test(normalized)) return 'production'
   if (/\b(cierre|caja|arqueo|conciliacion)\b/.test(normalized)) return 'cash_closing'
   if (/\b(predic|demanda|ia|semanal)\b/.test(normalized)) return 'ai_weekly'
-  if (/\b(mensual|mes)\b/.test(normalized)) return 'sales_monthly'
-  if (/\b(venta|ventas)\b/.test(normalized)) return 'sales_daily'
+  if (/\b(mensual(es)?|mes|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/.test(normalized) && /\b(venta|ventas)\b/.test(normalized)) return 'sales_monthly'
+  if (/\b(diari[oa]s?|hoy|ayer|dia|del dia|\d{1,2}[/-]\d{1,2}|20\d{2}-\d{2}-\d{2})\b/.test(normalized) && /\b(venta|ventas)\b/.test(normalized)) return 'sales_daily'
+  if (/\b(mensual(es)?|mes)\b/.test(normalized)) return 'sales_monthly'
+  if (/\b(venta|ventas)\b/.test(normalized)) return 'sales_ambiguous'
   return null
 }
 
@@ -72,7 +74,33 @@ export async function sendChatbotMessage(req, res) {
   }
 
   try {
-    const requestedReportKey = getRequestedReportKey(message)
+    const lastAssistantMessage = Array.isArray(history)
+      ? [...history].reverse().find((item) => item?.role === 'assistant')?.content || ''
+      : ''
+    if (isConfirmedReportRequest(message, lastAssistantMessage)) {
+      return res.json({ type: 'report_confirmation', action: 'generate_inventory_report', message: 'Generando el reporte de inventario.' })
+    }
+
+    const effectiveMessage = conversationQuery(message.trim(), history)
+    const fixedReply = getFixedChatReply(effectiveMessage, req.auth?.profile?.rol)
+    if (fixedReply) return res.json({ type: 'message', message: fixedReply })
+
+    const requestedReportKey = getRequestedReportKey(effectiveMessage)
+
+    if (requestedReportKey === 'sales_ambiguous') {
+      if (!canRoleUseChatbotIntent(req.auth?.profile?.rol, 'report')) {
+        return res.status(403).json({ message: 'Tu rol no tiene permiso para generar este reporte.' })
+      }
+      return res.json({
+        type: 'message',
+        message: '¿Deseas el reporte de venta diaria o del mes? (Si es diaria indica el día y si es mensual, especifica el mes).',
+        suggestions: [
+          'Reporte de venta diaria de hoy',
+          'Reporte de venta mensual de este mes',
+        ],
+      })
+    }
+
     if (requestedReportKey && requestedReportKey !== 'inventory') {
       if (!canRoleUseChatbotIntent(req.auth?.profile?.rol, 'report')) {
         return res.status(403).json({ message: 'Tu rol no tiene permiso para generar este reporte.' })
@@ -91,7 +119,7 @@ export async function sendChatbotMessage(req, res) {
         sales_monthly: 'Reporte de Ventas Mensual',
         sales_daily: 'Reporte de Ventas Diario',
       }
-      const normalized = normalizeText(message)
+      const normalized = normalizeText(effectiveMessage)
       const details = requestedReportKey === 'users' && /\binactiv/.test(normalized)
         ? 'Filtro: usuarios inactivos'
         : requestedReportKey === 'users' && /\bactiv/.test(normalized)
@@ -117,16 +145,6 @@ export async function sendChatbotMessage(req, res) {
         },
       })
     }
-    const lastAssistantMessage = Array.isArray(history)
-      ? [...history].reverse().find((item) => item?.role === 'assistant')?.content || ''
-      : ''
-    if (isConfirmedReportRequest(message, lastAssistantMessage)) {
-      return res.json({ type: 'report_confirmation', action: 'generate_inventory_report', message: 'Generando el reporte de inventario.' })
-    }
-
-    const effectiveMessage = conversationQuery(message.trim(), history)
-    const fixedReply = getFixedChatReply(effectiveMessage, req.auth?.profile?.rol)
-    if (fixedReply) return res.json({ type: 'message', message: fixedReply })
 
     const intent = detectChatbotIntent(effectiveMessage)
     if (!canRoleUseChatbotIntent(req.auth?.profile?.rol, intent)) {
@@ -134,8 +152,17 @@ export async function sendChatbotMessage(req, res) {
     }
 
     const normalizedMessage = normalizeText(effectiveMessage)
-    if (/(reporte|informe)/.test(normalizedMessage) && !/(inventario|stock|venta|produccion)/.test(normalizedMessage)) {
-      return res.json({ type: 'message', message: '¿Qué tipo de reporte deseas consultar: ventas, inventario o producción?' })
+    if (/(reporte|informe)/.test(normalizedMessage) && !/(inventario|stock|venta|produccion|usuario|proveedor|cliente|movimiento|receta|cierre|caja)/.test(normalizedMessage)) {
+      return res.json({
+        type: 'message',
+        message: '¿Qué tipo de reporte deseas generar? Puedes elegir entre:\n• **Ventas:** Diaria o mensual.\n• **Inventario:** Stock actual y productos bajo mínimo.\n• **Movimientos de bodega:** Entradas, salidas o mermas.\n• **Usuarios:** Activos o inactivos.\n• **Clientes frecuentes** o **Proveedores**.\n\nPor favor, indícame cuál necesitas.',
+        suggestions: [
+          'Reporte de ventas de hoy',
+          'Reporte de inventario',
+          'Reporte de movimientos de bodega',
+          'Reporte de usuarios',
+        ],
+      })
     }
     const verifiedContext = await buildChatbotContext(effectiveMessage)
     if (verifiedContext.validacion) {
@@ -178,6 +205,14 @@ export async function sendChatbotMessage(req, res) {
       const asksForActualSales = /(ventas?|vendimos|vendidas|ingresos|recaudacion|facturacion)/.test(normalizedSalesQuestion)
         && !/(predic|proyect|venderemos|demanda futura|estimacion)/.test(normalizedSalesQuestion)
       if (asksForActualSales) {
+        const hasDateCue = /(hoy|ayer|lunes|martes|miercoles|jueves|viernes|sabado|domingo|\d{1,2}[/-]\d{1,2}|20\d{2}-\d{2}-\d{2}|esta semana|este mes)/.test(normalizedSalesQuestion)
+        if (!hasDateCue) {
+          return res.json({
+            type: 'message',
+            message: '¿De qué fecha deseas consultar las ventas? (Puedes indicar "hoy", "ayer" o una fecha específica como "25/10/2026").',
+            suggestions: ['Ventas de hoy', 'Ventas de ayer'],
+          })
+        }
         const dailySales = verifiedContext.datos.ventasDelDia
         const productLines = Object.entries(dailySales?.porProducto || {})
           .map(([product, units]) => `${product}: ${formatNumber(units)} unidades`)
@@ -286,7 +321,7 @@ export async function sendChatbotMessage(req, res) {
     if (!isGeminiConfigured()) return res.status(503).json({ message: 'No pude obtener la información en este momento. Intenta nuevamente.' })
 
     const response = await generateChatbotResponse({
-      message: message.trim(),
+      message: effectiveMessage,
       history: normalizeHistory(history),
       context: {
         ...verifiedContext,

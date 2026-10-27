@@ -14,7 +14,9 @@ import {
   TriangleAlert,
   X,
   ClipboardList,
+  ClipboardCheck,
 } from 'lucide-react'
+import AuditoriaInventarioModal from './auditoria/AuditoriaInventarioModal'
 import {
   createProductoInventario,
   createMovimientoInventario,
@@ -36,6 +38,7 @@ import Pagination from '../../components/Pagination'
 import ModuleHeader from '../ModuleHeader'
 import SortableHeader from '../../components/SortableHeader'
 import ReporteModal from '../../components/ReporteModal'
+import SuccessModal from '../SuccessModal'
 import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
@@ -46,7 +49,7 @@ const DEFAULT_CATEGORIAS = [
   { nombre: 'Suministros', codigo: 'SUM' },
 ]
 
-const DEFAULT_TIPOS_MOVIMIENTO = ['Entrada', 'Merma', 'Ajuste']
+const DEFAULT_TIPOS_MOVIMIENTO = ['Entrada', 'Salida', 'Merma', 'Ajuste']
 
 function Inventarios() {
   const [activeTab, setActiveTab] = useState('catalogo')
@@ -81,6 +84,7 @@ function Inventarios() {
   const [errorCarga, setErrorCarga] = useState('')
   const [deleteItem, setDeleteItem] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [movimientoForm, setMovimientoForm] = useState({
     productoId: '',
@@ -138,11 +142,14 @@ function Inventarios() {
   })
 
   const filteredMovimientos = (Array.isArray(movimientos) ? movimientos : []).filter((mov) => {
-    const matchTipo = filterTipoMov === 'todos' || mov.tipo === filterTipoMov
+    const matchTipo = filterTipoMov === 'todos' || String(mov.tipo || '').toLowerCase() === String(filterTipoMov).toLowerCase()
     const normalizedSearch = movSearchTerm.trim().toLowerCase()
     const matchSearch = !normalizedSearch
-      || mov.producto.toLowerCase().includes(normalizedSearch)
+      || (mov.producto || '').toLowerCase().includes(normalizedSearch)
       || (mov.motivo || '').toLowerCase().includes(normalizedSearch)
+      || (mov.motivoTipo || '').toLowerCase().includes(normalizedSearch)
+      || (mov.tipo || '').toLowerCase().includes(normalizedSearch)
+      || (mov.usuario || '').toLowerCase().includes(normalizedSearch)
     const rawFecha = mov.createdAt ?? mov.fecha
     const isoFecha = String(rawFecha).slice(0, 10)
     const matchDesde = !movFechaDesde || isoFecha >= movFechaDesde
@@ -266,7 +273,7 @@ function Inventarios() {
     try {
       const tiposData = await listTiposMovimiento()
       if (tiposData.length > 0) {
-        setTiposMovimiento(tiposData.map((tipo) => tipo.nombre).filter((tipo) => tipo !== 'Salida'))
+        setTiposMovimiento(tiposData.map((tipo) => tipo.nombre))
       }
     } catch {
       setTiposMovimiento(DEFAULT_TIPOS_MOVIMIENTO)
@@ -573,12 +580,9 @@ function Inventarios() {
       }
 
       await loadProductos()
+      const msg = modalType === 'add' ? 'Producto creado correctamente.' : 'Producto actualizado correctamente.'
       handleCloseModal()
-      if (modalType === 'add') {
-        toast.success('Producto creado correctamente.')
-      } else {
-        toast.success('Producto actualizado correctamente.')
-      }
+      setSuccessMessage(msg)
     } catch (error) {
       setErrorProducto(error.message || 'No fue posible guardar el producto.')
     } finally {
@@ -627,7 +631,7 @@ function Inventarios() {
       })
       if (confirmar) await Promise.all([loadProductos(), loadMovimientos()])
       handleCloseModal()
-      toast.success(confirmar ? 'Entrada confirmada correctamente.' : 'Entrada guardada como borrador.')
+      setSuccessMessage(confirmar ? 'Entrada confirmada correctamente.' : 'Entrada guardada como borrador.')
     } catch (error) {
       setErrorProducto(error.message || 'No fue posible guardar la entrada.')
     } finally {
@@ -683,7 +687,7 @@ function Inventarios() {
       await createMovimientoInventario(payload)
       await Promise.all([loadProductos(), loadMovimientos()])
       handleCloseModal()
-      toast.success('Movimiento registrado correctamente.')
+      setSuccessMessage(modalType === 'merma' ? 'Merma registrada correctamente.' : 'Movimiento registrado correctamente.')
     } catch (error) {
       setErrorProducto(error.message || 'No fue posible registrar el movimiento.')
     } finally {
@@ -719,7 +723,7 @@ function Inventarios() {
         }
         await loadProveedores()
         handleCloseModal()
-        toast.success(modalType === 'provider-add' ? 'Proveedor creado correctamente.' : 'Proveedor actualizado correctamente.')
+        setSuccessMessage(modalType === 'provider-add' ? 'Proveedor creado correctamente.' : 'Proveedor actualizado correctamente.')
       } catch (error) {
         setProveedorError(error.message || 'No fue posible guardar el proveedor.')
       } finally {
@@ -732,7 +736,7 @@ function Inventarios() {
       try {
         await deleteProveedorInventario(item.id)
         await loadProveedores()
-        toast.success('Proveedor desactivado correctamente.')
+        setSuccessMessage('Proveedor desactivado correctamente.')
       } catch (error) {
         toast.error(error.message || 'No fue posible desactivar el proveedor.')
     }
@@ -747,7 +751,7 @@ function Inventarios() {
     try {
       await deleteProductoInventario(item.id)
       await loadProductos()
-      toast.success('Producto eliminado correctamente.')
+      setSuccessMessage('Producto eliminado correctamente.')
     } catch (error) {
       toast.error(error.message || 'No fue posible eliminar el producto.')
     } finally {
@@ -759,11 +763,11 @@ function Inventarios() {
   return (
     <div>
       {/* Tabs de navegación */}
-      <div className="bg-white rounded-xl shadow-md mb-6">
-        <div className="flex border-b border-gray-200">
+      <div className="bg-white rounded-xl shadow-md mb-6 overflow-hidden">
+        <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-none touch-scroll whitespace-nowrap">
           <button
             onClick={() => setActiveTab('catalogo')}
-            className={`px-6 py-4 font-semibold transition-colors ${
+            className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold text-xs sm:text-sm md:text-base transition-colors shrink-0 flex items-center gap-2 ${
               activeTab === 'catalogo'
                 ? 'border-b-4 border-cyan-500 text-cyan-600'
                 : 'text-gray-600 hover:text-gray-800'
@@ -774,7 +778,7 @@ function Inventarios() {
           </button>
           <button
             onClick={() => setActiveTab('movimientos')}
-            className={`px-6 py-4 font-semibold transition-colors ${
+            className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold text-xs sm:text-sm md:text-base transition-colors shrink-0 flex items-center gap-2 ${
               activeTab === 'movimientos'
                 ? 'border-b-4 border-cyan-500 text-cyan-600'
                 : 'text-gray-600 hover:text-gray-800'
@@ -785,7 +789,7 @@ function Inventarios() {
           </button>
           <button
             onClick={() => setActiveTab('proveedores')}
-            className={`px-6 py-4 font-semibold transition-colors ${
+            className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold text-xs sm:text-sm md:text-base transition-colors shrink-0 flex items-center gap-2 ${
               activeTab === 'proveedores'
                 ? 'border-b-4 border-cyan-500 text-cyan-600'
                 : 'text-gray-600 hover:text-gray-800'
@@ -796,7 +800,7 @@ function Inventarios() {
           </button>
           <button
             onClick={() => setActiveTab('alertas')}
-            className={`px-6 py-4 font-semibold transition-colors relative ${
+            className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold text-xs sm:text-sm md:text-base transition-colors relative shrink-0 flex items-center gap-2 ${
               activeTab === 'alertas'
                 ? 'border-b-4 border-cyan-500 text-cyan-600'
                 : 'text-gray-600 hover:text-gray-800'
@@ -805,7 +809,7 @@ function Inventarios() {
             <Bell size={18} aria-hidden="true" />
             Alertas de Reabastecimiento
             {alertas.length > 0 && (
-              <span className="absolute top-2 right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              <span className="ml-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
                 {alertas.length}
               </span>
             )}
@@ -824,31 +828,31 @@ function Inventarios() {
 
           {/* Header */}
           <ModuleHeader title="Cat&#225;logo de Art&#237;culos" description="Control de productos, materia prima y suministros" eyebrow="Inventario" icon={Package}>
-<div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReporteOpen(true)}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium flex items-center justify-center space-x-2"
-                >
-                  <FileDown size={18} aria-hidden="true" />
-                  <span>Reporte</span>
-                </button>
-                <button
-                  onClick={() => handleOpenModal('add')}
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium flex items-center justify-center space-x-2"
-                >
-                  <Plus size={18} aria-hidden="true" />
-                  <span>Nuevo Artículo</span>
-                </button>
-                <button
-                  onClick={loadProductos}
-                  className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 transition-all duration-200 shadow-md font-medium flex items-center justify-center space-x-2"
-                >
-                  <RefreshCw size={18} aria-hidden="true" />
-                  <span>Recargar</span>
-                </button>
-              </div>
-</ModuleHeader>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setReporteOpen(true)}
+                className="flex-1 sm:flex-initial bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md font-medium text-xs sm:text-sm flex items-center justify-center space-x-1.5"
+              >
+                <FileDown size={17} aria-hidden="true" />
+                <span>Reporte</span>
+              </button>
+              <button
+                onClick={() => handleOpenModal('add')}
+                className="flex-1 sm:flex-initial bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium text-xs sm:text-sm flex items-center justify-center space-x-1.5"
+              >
+                <Plus size={17} aria-hidden="true" />
+                <span>Nuevo Artículo</span>
+              </button>
+              <button
+                onClick={loadProductos}
+                className="flex-1 sm:flex-initial bg-gray-300 text-gray-700 px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg hover:bg-gray-400 transition-all duration-200 shadow-md font-medium text-xs sm:text-sm flex items-center justify-center space-x-1.5"
+              >
+                <RefreshCw size={17} aria-hidden="true" />
+                <span>Recargar</span>
+              </button>
+            </div>
+          </ModuleHeader>
 
           {/* Estadísticas y filtros */}
             <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 mb-6">
@@ -922,7 +926,7 @@ function Inventarios() {
 
           {/* Tabla de productos */}
           <div className="bg-white rounded-xl shadow-md overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-scroll">
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                   <tr>
@@ -1026,22 +1030,30 @@ function Inventarios() {
       {/* Contenido del Tab - Movimientos */}
       {activeTab === 'movimientos' && (
         <>
-          <div className="relative isolate overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 p-5 shadow-sm sm:p-7">
-            <h3 className="text-2xl font-bold text-slate-900 mb-4">Movimientos de Bodega</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="relative isolate overflow-hidden rounded-2xl sm:rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 p-4 shadow-sm sm:p-7">
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4">Movimientos de Bodega</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
               <button
                 onClick={() => handleOpenModal('entrada')}
-                className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl hover:from-green-100 hover:to-green-200 transition-all text-center border-2 border-green-200"
+                className="bg-gradient-to-br from-green-50 to-green-100 p-4 sm:p-6 rounded-xl hover:from-green-100 hover:to-green-200 transition-all text-center border-2 border-green-200 shadow-xs"
               >
-                <ArrowDownToLine size={32} aria-hidden="true" className="mx-auto mb-2" />
-                <p className="font-semibold text-gray-800">Registro de Entrada</p>
+                <ArrowDownToLine size={28} aria-hidden="true" className="mx-auto mb-2 text-green-700" />
+                <p className="font-semibold text-gray-800 text-sm sm:text-base">Registro de Entrada</p>
               </button>
               <button
                 onClick={() => handleOpenModal('merma')}
-                className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl hover:from-orange-100 hover:to-orange-200 transition-all text-center border-2 border-orange-200"
+                className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 sm:p-6 rounded-xl hover:from-orange-100 hover:to-orange-200 transition-all text-center border-2 border-orange-200 shadow-xs"
               >
-                <TriangleAlert size={32} aria-hidden="true" className="mx-auto mb-2" />
-                <p className="font-semibold text-gray-800">Gestión de Mermas</p>
+                <TriangleAlert size={28} aria-hidden="true" className="mx-auto mb-2 text-orange-600" />
+                <p className="font-semibold text-gray-800 text-sm sm:text-base">Gestión de Mermas</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenModal('auditoria')}
+                className="bg-gradient-to-br from-cyan-50 to-blue-100 p-4 sm:p-6 rounded-xl hover:from-cyan-100 hover:to-blue-200 transition-all text-center border-2 border-cyan-200 shadow-xs sm:col-span-2 md:col-span-1"
+              >
+                <ClipboardCheck size={28} aria-hidden="true" className="mx-auto mb-2 text-cyan-700" />
+                <p className="font-semibold text-gray-800 text-sm sm:text-base">Auditoría de Inventario</p>
               </button>
             </div>
           </div>
@@ -1068,7 +1080,7 @@ function Inventarios() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-sm"
                   >
                     <option value="todos">Todos los tipos</option>
-                    {tiposMovimiento.map((tipo) => (
+                    {Array.from(new Set(['Entrada', 'Salida', 'Merma', 'Ajuste', ...tiposMovimiento])).map((tipo) => (
                       <option key={tipo} value={tipo}>{tipo}</option>
                     ))}
                   </select>
@@ -1107,7 +1119,7 @@ function Inventarios() {
               )}
 
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-scroll">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1143,17 +1155,17 @@ function Inventarios() {
                       <td className="px-6 py-4 text-sm text-gray-600">{mov.usuario}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{mov.motivo}</td>
                       <td className="px-6 py-4 text-center">
-                        {(mov.tipo === 'Entrada' || mov.tipo === 'Merma') && (
+
                           <button
                             type="button"
                             onClick={() => handleOpenModal('movement-view', mov)}
-                            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-50"
-                            title={`Ver detalle de ${mov.tipo.toLowerCase()}`}
+                            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-50 dark:text-cyan-400 dark:hover:bg-cyan-950/40 transition-colors"
+                            title={`Ver detalle de ${mov.tipo?.toLowerCase() || 'movimiento'}`}
                           >
                             <Eye size={16} aria-hidden="true" />
                             Ver
                           </button>
-                        )}
+
                       </td>
                     </tr>
                   ))}
@@ -1196,7 +1208,7 @@ function Inventarios() {
               Nuevo proveedor
             </button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-scroll">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -1264,55 +1276,56 @@ function Inventarios() {
               const criticidad = porcentaje < 50 ? 'crítico' : 'bajo'
               
               return (
-                <div key={producto.id} className={`bg-white rounded-xl shadow-md p-6 border-l-8 ${
+                <div key={producto.id} className={`bg-white rounded-xl shadow-md p-4 sm:p-6 border-l-8 ${
                   criticidad === 'crítico' ? 'border-red-500' : 'border-yellow-500'
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-3 mb-2">
                         {criticidad === 'crítico' ? (
-                          <TriangleAlert size={30} aria-hidden="true" className="text-red-500" />
+                          <TriangleAlert size={28} aria-hidden="true" className="text-red-500 shrink-0" />
                         ) : (
-                          <AlertTriangle size={30} aria-hidden="true" className="text-yellow-500" />
+                          <AlertTriangle size={28} aria-hidden="true" className="text-yellow-500 shrink-0" />
                         )}
-                        <div>
-                          <h4 className="text-lg font-bold text-gray-800">{producto.nombre}</h4>
-                          <p className="text-sm text-gray-600">Código: {producto.codigo}</p>
+
+                        <div className="min-w-0">
+                          <h4 className="text-base sm:text-lg font-bold text-gray-800 truncate">{producto.nombre}</h4>
+                          <p className="text-xs sm:text-sm text-gray-600">Código: {producto.codigo}</p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-4 mt-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4">
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Stock Actual</p>
-                          <p className={`text-2xl font-bold ${criticidad === 'crítico' ? 'text-red-600' : 'text-yellow-600'}`}>
+                          <p className={`text-xl sm:text-2xl font-bold ${criticidad === 'crítico' ? 'text-red-600' : 'text-yellow-600'}`}>
                             {producto.stock}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Stock Mínimo</p>
-                          <p className="text-2xl font-bold text-gray-800">{producto.minimo}</p>
+                          <p className="text-xl sm:text-2xl font-bold text-gray-800">{producto.minimo}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Faltante</p>
-                          <p className="text-2xl font-bold text-gray-800">{producto.minimo - producto.stock}</p>
+                          <p className="text-xl sm:text-2xl font-bold text-gray-800">{producto.minimo - producto.stock}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-600 mb-1">Nivel</p>
-                          <p className={`text-2xl font-bold ${criticidad === 'crítico' ? 'text-red-600' : 'text-yellow-600'}`}>
+                          <p className={`text-xl sm:text-2xl font-bold ${criticidad === 'crítico' ? 'text-red-600' : 'text-yellow-600'}`}>
                             {porcentaje.toFixed(0)}%
                           </p>
                         </div>
                       </div>
-                      <div className="mt-4 bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div className="mt-4 bg-gray-200 rounded-full h-2.5 sm:h-3 overflow-hidden">
                         <div 
                           className={`h-full transition-all ${criticidad === 'crítico' ? 'bg-red-500' : 'bg-yellow-500'}`}
                           style={{ width: `${Math.min(porcentaje, 100)}%` }}
                         ></div>
                       </div>
                     </div>
-                    <div className="ml-6">
+                    <div className="sm:ml-6 mt-2 sm:mt-0 flex justify-end w-full sm:w-auto">
                       <button
                         onClick={() => handleOpenModal('entrada', producto)}
-                        className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
+                        className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium text-xs sm:text-sm text-center"
                       >
                         Registrar Entrada
                       </button>
@@ -1357,8 +1370,8 @@ function Inventarios() {
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Cantidad</span><p className="mt-1 font-semibold text-gray-800">{selectedItem.cantidad}</p></div>
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Proveedor</span><p className="mt-1 text-gray-800">{selectedItem.proveedor || 'No aplica'}</p></div>
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Usuario</span><p className="mt-1 text-gray-800">{selectedItem.usuario}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Costo unitario</span><p className="mt-1 text-gray-800">Q{selectedItem.costoUnitario.toFixed(2)}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Pérdida económica</span><p className="mt-1 font-semibold text-orange-600">Q{selectedItem.perdidaEconomica.toFixed(2)}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Costo unitario</span><p className="mt-1 text-gray-800">Q{(Number(selectedItem.costoUnitario) || 0).toFixed(2)}</p></div>
+                      <div><span className="text-xs font-semibold uppercase text-gray-500">Pérdida económica</span><p className="mt-1 font-semibold text-orange-600">Q{(Number(selectedItem.perdidaEconomica) || 0).toFixed(2)}</p></div>
                       <div><span className="text-xs font-semibold uppercase text-gray-500">Stock</span><p className="mt-1 text-gray-800">{selectedItem.stockAntes ?? '—'} → {selectedItem.stockDespues ?? '—'}</p></div>
                     </div>
                   </div>
@@ -1373,7 +1386,7 @@ function Inventarios() {
                       rel="noreferrer"
                       className="inline-flex w-full items-center justify-center rounded-lg bg-cyan-50 py-3 font-medium text-cyan-700 hover:bg-cyan-100"
                     >
-                      Ver factura adjunta
+                      {selectedItem.tipo === 'Merma' ? 'Ver evidencia adjunta' : 'Ver documento adjunto'}
                     </a>
                   )}
                   <button type="button" onClick={handleCloseModal} className="w-full rounded-lg bg-gray-200 py-3 font-medium text-gray-700 hover:bg-gray-300">Cerrar</button>
@@ -1739,6 +1752,13 @@ function Inventarios() {
         </div>
       )}
 
+      <AuditoriaInventarioModal
+        isOpen={modalType === 'auditoria'}
+        onClose={handleCloseModal}
+        productos={productos}
+        categorias={categoriasInventario}
+      />
+
       <ReporteModal
         open={reporteOpen}
         title="Reporte del inventario actual"
@@ -1747,6 +1767,12 @@ function Inventarios() {
         generating={generandoReporte}
         onGenerate={handleGenerarReporteInventario}
         onClose={() => setReporteOpen(false)}
+      />
+
+      <SuccessModal
+        isOpen={Boolean(successMessage)}
+        message={successMessage}
+        onClose={() => setSuccessMessage('')}
       />
     </div>
   )

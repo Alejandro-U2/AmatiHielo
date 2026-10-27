@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import {
   listRecetas,
+  getRecetasCount,
   getRecetaById,
   createReceta,
   updateReceta,
@@ -27,6 +28,7 @@ router.use(requireSession)
 
 // Recetas
 router.get('/', listRecetas)
+router.get('/count', getRecetasCount)
 router.post('/', requireAdmin, createReceta)
 router.get('/categorias', listCategoriasReceta)
 router.get('/presentaciones', listPresentacionesReceta)

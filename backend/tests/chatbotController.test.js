@@ -134,6 +134,50 @@ describe('sendChatbotMessage', () => {
     expect(response.body.message).toBe('Solo puedo consultar el pronóstico de los próximos 7 días.')
   })
 
+  it('pide aclaración de venta diaria o mensual cuando solicitan reporte de venta ambiguo', async () => {
+    const response = createResponse()
+    await sendChatbotMessage(request('reporte de venta'), response)
+
+    expect(response.body.message).toContain('¿Deseas el reporte de venta diaria o del mes?')
+    expect(response.body.suggestions).toContain('Reporte de venta diaria de hoy')
+    expect(response.body.suggestions).toContain('Reporte de venta mensual de este mes')
+  })
+
+  it('resuelve el reporte diario tras la aclaración del usuario', async () => {
+    const history = [
+      { role: 'user', content: 'reporte de venta' },
+      { role: 'assistant', content: '¿Deseas el reporte de venta diaria o del mes? (Si es diaria indica el día y si es mensual, especifica el mes).' },
+    ]
+    const response = createResponse()
+    await sendChatbotMessage(request('diaria de hoy', 'Administrador', history), response)
+
+    expect(response.body.type).toBe('report_preview')
+    expect(response.body.reportPreview.reportKey).toBe('sales_daily')
+    expect(response.body.reportPreview.title).toBe('Reporte de Ventas Diario')
+  })
+
+  it('pide la fecha si solicitan ventas reales sin especificar día', async () => {
+    mocks.buildChatbotContext.mockResolvedValue({
+      intencion: 'sales',
+      datos: { ventasDelDia: { fecha: '2026-10-05', unidades: 0, ingresos: 0, porProducto: {} } },
+    })
+
+    const response = createResponse()
+    await sendChatbotMessage(request('¿Cuánto vendimos?'), response)
+
+    expect(response.body.message).toContain('¿De qué fecha deseas consultar las ventas?')
+    expect(response.body.suggestions).toContain('Ventas de hoy')
+  })
+
+  it('ofrece tipos de reportes si solicitan reporte genérico', async () => {
+    const response = createResponse()
+    await sendChatbotMessage(request('quiero un reporte'), response)
+
+    expect(response.body.message).toContain('¿Qué tipo de reporte deseas generar?')
+    expect(response.body.suggestions).toContain('Reporte de ventas de hoy')
+    expect(response.body.suggestions).toContain('Reporte de inventario')
+  })
+
   it('devuelve un error seguro sin incluir detalles internos', async () => {
     mocks.buildChatbotContext.mockRejectedValue(new Error('SQL, token privado y stack trace'))
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})

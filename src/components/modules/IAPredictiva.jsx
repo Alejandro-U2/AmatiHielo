@@ -18,7 +18,7 @@ import { getDateRange, getHistoricalSales } from '../../services/salesService'
 import { generateDemandPredictions, getPredictionProducts } from '../../services/predictionService'
 import { evaluateCompletedPredictions, getPredictionAccuracy, savePredictionSnapshot } from '../../services/predictionHistoryService'
 import { getAiStatistics } from '../../services/statisticsService'
-import { BarChart3, Bot, CloudSun, FileDown, Lightbulb, RefreshCw, Sparkles, TrendingUp } from 'lucide-react'
+import { BarChart3, Bell, Bot, CloudSun, FileDown, Lightbulb, RefreshCw, Sparkles, Target, TrendingUp, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import Pagination from '../../components/Pagination'
 import SortableHeader from '../../components/SortableHeader'
@@ -369,19 +369,19 @@ function IAPredictiva() {
   }))
 
   return (
-<div className="min-h-full bg-slate-50/80 p-4 md:p-6 lg:p-8">
-      <div className="relative mb-6 overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 px-5 py-6 text-slate-900 shadow-sm sm:px-8 sm:py-8">
+    <div className="min-h-full space-y-6">
+      <div className="relative mb-6 overflow-hidden rounded-2xl sm:rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-blue-100 px-4 py-5 text-slate-900 shadow-sm sm:px-8 sm:py-8">
         <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-cyan-300/45 blur-3xl" />
         <div className="pointer-events-none absolute bottom-[-6rem] right-1/3 h-48 w-48 rounded-full bg-blue-300/40 blur-3xl" />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-cyan-800">
-              <Sparkles size={14} /> Analisis operativo
+            <div className="mb-2.5 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-white/80 px-2.5 py-1 text-xs font-medium text-cyan-800">
+              <Sparkles size={13} /> Analisis operativo
             </div>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Inteligencia Artificial Predictiva</h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">Pronostico, demanda y recomendaciones para planificar la operacion con datos actuales.</p>
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Inteligencia Artificial Predictiva</h2>
+            <p className="mt-1.5 max-w-xl text-xs sm:text-sm leading-5 sm:leading-6 text-slate-600">Pronostico, demanda y recomendaciones para planificar la operacion con datos actuales.</p>
           </div>
-          <div className="flex items-center gap-2 self-start rounded-xl border border-cyan-200 bg-white/80 px-3 py-2 text-xs text-slate-700 sm:self-auto">
+          <div className="flex items-center gap-2 self-start rounded-xl border border-cyan-200 bg-white/80 px-3 py-2 text-xs text-slate-700 sm:self-auto shrink-0">
             <span className={`h-2 w-2 rounded-full ${weatherLoading ? 'animate-pulse bg-amber-500' : forecast ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             {weatherLoading ? 'Actualizando datos' : forecast ? 'Datos conectados' : 'Clima sin actualizar'}
           </div>
@@ -389,15 +389,15 @@ function IAPredictiva() {
       </div>
 
       {weatherError && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
+        <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-xl">
           <p className="text-sm text-red-800">
             No se pudieron actualizar los datos climáticos: {weatherError}
           </p>
         </div>
       )}
 
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <nav className="flex gap-2 overflow-x-auto" aria-label="Apartados de IA predictiva">
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm overflow-hidden">
+        <nav className="flex gap-2 overflow-x-auto scrollbar-none touch-scroll whitespace-nowrap" aria-label="Apartados de IA predictiva">
           {[
             { id: 'dashboard', label: 'Resumen', icon: BarChart3 },
             { id: 'clima', label: 'Clima', icon: CloudSun },
@@ -413,7 +413,7 @@ function IAPredictiva() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 aria-current={selected ? 'page' : undefined}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-cyan-500 ${selected ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-blue-900/15' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-cyan-500 ${selected ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-blue-900/15' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
               >
                 <Icon size={17} strokeWidth={2} />
                 {tab.label}
@@ -425,80 +425,79 @@ function IAPredictiva() {
 
       {activeTab === 'dashboard' && (
         <div>
-          <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 2xl:grid-cols-6">
-            <div className="group rounded-2xl border border-purple-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">🎯</span>
-                <span className="text-xs font-semibold text-purple-700 bg-purple-200 px-2 py-1 rounded-full">
-                  Precisión medida
-                </span>
-              </div>
-<p className="text-xl md:text-3xl font-bold text-purple-700">{kpis.precisionModelo === null ? '—' : `${kpis.precisionModelo}%`}</p>
-              <p className="text-xs text-purple-600 mt-1">
-                {kpis.precisionModelo === null
-                  ? predictionAccuracy.completedPeriods < 4
-                    ? `Midiendo · ${predictionAccuracy.completedPeriods}/4 periodos completos`
-                    : 'Sin ventas reales suficientes para medir'
-                  : 'Precisión histórica (1 − WAPE)'}
-              </p>
-            </div>
+          <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4 mb-6">
+            {[
+              {
+                label: 'Precisión medida',
+                value: kpis.precisionModelo === null ? '—' : `${kpis.precisionModelo}%`,
+                change: kpis.precisionModelo === null
+                  ? (predictionAccuracy.completedPeriods < 4
+                    ? `Midiendo (${predictionAccuracy.completedPeriods}/4)`
+                    : 'Sin ventas suficientes')
+                  : 'Histórica (1 − WAPE)',
+                tone: 'purple',
+                icon: Target,
+                chart: 'dashboard-chart-purple',
+              },
+              {
+                label: 'Ventas Sem. Actual',
+                value: String(kpis.ventasSemanaActual),
+                change: 'Semana en curso',
+                tone: 'blue',
+                icon: TrendingUp,
+                chart: 'dashboard-chart-blue',
+              },
+              {
+                label: 'Predicción',
+                value: String(kpis.prediccionProximaSemana ?? '—'),
+                change: 'Próxima semana',
+                tone: 'green',
+                icon: Sparkles,
+                chart: 'dashboard-chart-green',
+              },
+              {
+                label: 'Tendencia',
+                value: kpis.incrementoEsperado === null ? '—' : `${kpis.incrementoEsperado >= 0 ? '+' : ''}${kpis.incrementoEsperado.toFixed(1)}%`,
+                change: 'Incremento esperado',
+                tone: 'orange',
+                icon: BarChart3,
+                chart: 'dashboard-chart-orange',
+                negative: kpis.incrementoEsperado !== null && kpis.incrementoEsperado < 0,
+              },
+              {
+                label: 'Cobertura',
+                value: `${kpis.cobertura}/${predictionResult.predictions.length}`,
+                change: 'Con historial activo',
+                tone: 'cyan',
+                icon: Zap,
+                chart: 'dashboard-chart-blue',
+              },
+              {
+                label: 'Alertas',
+                value: String(kpis.alertasActivas),
+                change: 'Revisión pendiente',
+                tone: 'red',
+                icon: Bell,
+                chart: 'dashboard-chart-orange',
+                negative: kpis.alertasActivas > 0,
+              },
+            ].map((metric) => {
+              const MetricIcon = metric.icon
 
-            <div className="group rounded-2xl border border-blue-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">📈</span>
-                <span className="text-xs font-semibold text-blue-700 bg-blue-200 px-2 py-1 rounded-full">
-                  Actual
-                </span>
-              </div>
-              <p className="text-xl md:text-3xl font-bold text-blue-700">{kpis.ventasSemanaActual}</p>
-              <p className="text-xs text-blue-600 mt-1">Ventas Sem. Actual</p>
-            </div>
-
-            <div className="group rounded-2xl border border-emerald-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">🔮</span>
-                <span className="text-xs font-semibold text-green-700 bg-green-200 px-2 py-1 rounded-full">
-                  Predicción
-                </span>
-              </div>
-              <p className="text-xl md:text-3xl font-bold text-green-700">{kpis.prediccionProximaSemana ?? '—'}</p>
-              <p className="text-xs text-green-600 mt-1">Próxima Semana</p>
-            </div>
-
-            <div className="group rounded-2xl border border-orange-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">📊</span>
-                <span className="text-xs font-semibold text-orange-700 bg-orange-200 px-2 py-1 rounded-full">
-                  Tendencia
-                </span>
-              </div>
-              <p className="text-xl md:text-3xl font-bold text-orange-700">
-                {kpis.incrementoEsperado === null ? '—' : `${kpis.incrementoEsperado >= 0 ? '+' : ''}${kpis.incrementoEsperado.toFixed(1)}%`}
-              </p>
-              <p className="text-xs text-orange-600 mt-1">Incremento Esperado</p>
-            </div>
-
-            <div className="group rounded-2xl border border-cyan-100/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">⚡</span>
-                <span className="text-xs font-semibold text-cyan-700 bg-cyan-200 px-2 py-1 rounded-full">
-                  Cobertura
-                </span>
-              </div>
-              <p className="text-xl md:text-3xl font-bold text-cyan-700">{kpis.cobertura}/{predictionResult.predictions.length}</p>
-              <p className="text-xs text-cyan-600 mt-1">Productos con ventas suficientes</p>
-            </div>
-
-            <div className="group rounded-2xl border border-rose-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">🔔</span>
-                <span className="text-xs font-semibold text-red-700 bg-red-200 px-2 py-1 rounded-full">
-                  Alertas
-                </span>
-              </div>
-              <p className="text-xl md:text-3xl font-bold text-red-700">{kpis.alertasActivas}</p>
-              <p className="text-xs text-red-600 mt-1">Pendientes</p>
-            </div>
+              return (
+                <div key={metric.label} className={`dashboard-kpi dashboard-tone-${metric.tone}`}>
+                  <div className="dashboard-kpi-icon"><MetricIcon size={24} strokeWidth={2.2} /></div>
+                  <div className="min-w-0">
+                    <p className="dashboard-kpi-label">{metric.label}</p>
+                    <p className="dashboard-kpi-value">{metric.value}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className={`dashboard-kpi-change ${metric.negative ? 'is-negative' : ''}`}>{metric.change}</span>
+                    </div>
+                  </div>
+                  <div className={`dashboard-sparkline ${metric.chart}`} aria-hidden="true" />
+                </div>
+              )
+            })}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 mb-6">
@@ -539,7 +538,7 @@ function IAPredictiva() {
                   {predictionLoading
                     ? 'Calculando estimaciones...'
                     : predictionResult.predictions.length
-                      ? 'No hay productos con ventas en cinco días distintos para estimar demanda.'
+                      ? 'No hay productos con ventas registradas en los últimos 30 días para estimar demanda.'
                       : 'Sin datos de ventas o recetas para estimar demanda.'}
                 </div>
               )}
@@ -801,7 +800,7 @@ function IAPredictiva() {
                             className="text-sm font-bold text-purple-700"
                             title="Indicador heurístico basado en cantidad y regularidad de ventas y disponibilidad de clima; no es precisión medida."
                           >
-                            {pred.hasEnoughSales ? `Estimado ${pred.confianza}%` : `Insuficiente · ${pred.salesDays}/5 días`}
+                            {pred.hasEnoughSales ? `Estimado ${pred.confianza}%` : 'Sin ventas registradas'}
                           </span>
                           <div className="w-20 bg-gray-200 rounded-full h-2 mt-1">
                             <div

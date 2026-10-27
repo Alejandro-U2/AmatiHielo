@@ -1,5 +1,6 @@
 import { getAccessToken } from './authService'
 import { API_URL as configuredApiUrl } from './apiUrl'
+import { notifyDataChange } from './realtimeSync'
 
 const API_URL = configuredApiUrl.replace(/\/$/, '')
 
@@ -142,5 +143,7 @@ export async function createVentaPos(input) {
     body: input,
   })
 
-  return normalizeVenta(payload?.data || {})
+  const venta = normalizeVenta(payload?.data || {})
+  notifyDataChange('ventas')
+  return venta
 }

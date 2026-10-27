@@ -2,7 +2,10 @@
 .ice-cube { --cube-size: 78px; display: inline-flex; position: relative; width: var(--cube-size); height: var(--cube-size); flex: 0 0 auto; align-items: center; justify-content: center; vertical-align: middle; transform-origin: 50% 60%; transition: transform .3s ease, filter .3s ease; }
 .ice-cube--hero { --cube-size: clamp(180px, 23vw, 235px); }
 .ice-cube--avatar { --cube-size: 40px; }
-.ice-cube--floating { --cube-size: 54px; }
+.ice-cube--floating { --cube-size: 34px; }
+@media (min-width: 640px) {
+  .ice-cube--floating { --cube-size: 44px; }
+}
 .ice-cube--compact { --cube-size: 28px; }
 .ice-cube--small { --cube-size: 40px; }
 .ice-cube--regular { --cube-size: 78px; }

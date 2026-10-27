@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertCircle,
+  ArrowRight,
+  Banknote,
+  CheckCircle2,
+  Coins,
+  ExternalLink,
   FileDown,
+  Lock,
+  Minus,
+  Package,
+  Plus,
   ReceiptText,
+  ShoppingCart,
+  Trash2,
   TrendingUp,
   Wallet,
   WalletCards,
@@ -19,6 +31,7 @@ import {
 } from '../../services/posService'
 import { getParametrosSistema } from '../../services/configuracionSistemaService'
 import { confirmarArqueoCaja, getArqueoCaja } from '../../services/cajaService'
+import { subscribeToDataChanges, notifyDataChange } from '../../services/realtimeSync'
 import { isValidNombreCliente, isValidTelefono, isValidNIT, sanitizeNombreCliente, sanitizeTelefono, sanitizeNIT, capitalizeWords } from '../../utils/validation'
 import Pagination from '../../components/Pagination'
 import SortableHeader from '../../components/SortableHeader'
@@ -26,6 +39,7 @@ import ReporteModal from '../../components/ReporteModal'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
 import ModuleHeader from '../ModuleHeader'
+import SuccessModal from '../SuccessModal'
 
 function getLatestSundayBoundary(referenceDate = new Date()) {
   const boundary = new Date(referenceDate)
@@ -173,8 +187,15 @@ function PuntoVenta() {
   const [arqueoConfirmado, setArqueoConfirmado] = useState(false)
   const [arqueoPeriodo, setArqueoPeriodo] = useState(() => getArqueoPeriod())
   const [isConfirmingArqueo, setIsConfirmingArqueo] = useState(false)
+  const [arqueoForm, setArqueoForm] = useState({
+    sencilloDejado: '200',
+    efectivoReal: '',
+    observaciones: '',
+  })
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+  const [successTitle, setSuccessTitle] = useState('Operación completada')
+  const [successSubtitle, setSuccessSubtitle] = useState('Punto de Venta')
   const [metodoPago, setMetodoPago] = useState('Efectivo')
   const [metodosPago, setMetodosPago] = useState(['Efectivo', 'Transferencia'])
   const [necesitaFactura, setNecesitaFactura] = useState(false)
@@ -197,16 +218,17 @@ function PuntoVenta() {
   })
   const [isSavingCliente, setIsSavingCliente] = useState(false)
 
-  const loadData = async () => {
+  const loadData = async (forceFull = false, { updateRecetas = true } = {}) => {
     try {
       setIsLoading(true)
       setErrorMsg('')
+      const shouldLoadCatalogs = forceFull || metodosPago.length === 0 || clientes.length === 0
       const [recetasData, ventasData, parametrosData, metodosPagoData, clientesData] = await Promise.all([
-        getRecetas(),
+        updateRecetas ? getRecetas({ includeImages: true }) : Promise.resolve(null),
         listVentasPos(),
-        getParametrosSistema().catch(() => null),
-        listMetodosPago().catch(() => []),
-        listClientesPos().catch(() => []),
+        shouldLoadCatalogs ? getParametrosSistema().catch(() => null) : Promise.resolve(null),
+        shouldLoadCatalogs ? listMetodosPago().catch(() => []) : Promise.resolve([]),
+        shouldLoadCatalogs ? listClientesPos().catch(() => []) : Promise.resolve([]),
       ])
 
       if (parametrosData?.impuestos) {
@@ -216,29 +238,32 @@ function PuntoVenta() {
       if (metodosPagoData.length > 0) {
         setMetodosPago(metodosPagoData.map((metodo) => metodo.nombre))
       }
-      setProductos(recetasData.map((receta) => ({
-        id: receta.id,
-        codigo: receta.codigo,
-        nombre: receta.nombre,
-        categoria: receta.categoria || 'General',
-        presentacion: receta.presentacion,
-        precio: Number(receta.precioSugerido || receta.costoTotal || 0),
-        ingredientes: receta.ingredientes || [],
-      })))
+      if (recetasData) {
+        setProductos(recetasData.map((receta) => ({
+          id: receta.id,
+          codigo: receta.codigo,
+          nombre: receta.nombre,
+          categoria: receta.categoria || 'General',
+          presentacion: receta.presentacion,
+          precio: Number(receta.precioSugerido || receta.costoTotal || 0),
+          imagenUrl: receta.imagenUrl || null,
+          ingredientes: receta.ingredientes || [],
+        })))
+      }
       setVentas(ventasData)
-      setClientes(clientesData)
+      if (clientesData.length > 0) {
+        setClientes(clientesData)
+      }
     } catch (error) {
       setErrorMsg(error.message || 'No fue posible cargar el POS.')
-      setProductos([])
+      if (updateRecetas) {
+        setProductos([])
+      }
       setVentas([])
     } finally {
       setIsLoading(false)
     }
   }
-
-  useEffect(() => {
-    loadData()
-  }, [])
 
   const cargarArqueo = async () => {
     const periodo = getArqueoPeriod()
@@ -253,7 +278,19 @@ function PuntoVenta() {
   }
 
   useEffect(() => {
+    loadData(false, { updateRecetas: true })
     cargarArqueo()
+
+    // Suscripción en tiempo real: sincroniza cambios de recetas, ventas e inventario
+    const unsubscribe = subscribeToDataChanges(({ type }) => {
+      const isPeriodic = type === 'interval' || type === 'focus' || type === 'visibility'
+      loadData(false, { updateRecetas: !isPeriodic })
+      if (type === 'ventas' || type === 'caja' || type === 'all') {
+        cargarArqueo()
+      }
+    }, { intervalSeconds: 15, types: ['all', 'ventas', 'recetas', 'caja', 'inventario'] })
+
+    return () => unsubscribe()
   }, [])
 
   const categorias = useMemo(
@@ -273,6 +310,27 @@ function PuntoVenta() {
     })
   }, [ventas])
 
+  // Métricas en tiempo real del día para las cards superiores
+  const kpisHoy = useMemo(() => {
+    const totalVentas = ventasDelDia.reduce((sum, venta) => sum + (Number(venta.total) || 0), 0)
+    const transacciones = ventasDelDia.length
+    const ticketPromedio = transacciones > 0 ? totalVentas / transacciones : 0
+    const ventasEfectivo = ventasDelDia
+      .filter((venta) => (venta.metodoPago || '').toLowerCase() === 'efectivo')
+      .reduce((sum, venta) => sum + (Number(venta.total) || 0), 0)
+    const fondoCaja = Number(arqueoResumen?.fondoInicial ?? arqueoResumen?.sencilloDejado ?? 0)
+    const cajaActual = ventasEfectivo + fondoCaja
+
+    return {
+      totalVentas,
+      transacciones,
+      ticketPromedio,
+      cajaActual,
+      fondoCaja,
+      ventasEfectivo,
+    }
+  }, [ventasDelDia, arqueoResumen])
+
   const arqueoCaja = useMemo(() => {
     const totalVentas = arqueoResumen?.totalVentas ?? ventasDelDia.reduce((sum, venta) => sum + venta.total, 0)
     const porMetodo = metodosPago.map((nombre) => ({
@@ -288,28 +346,72 @@ function PuntoVenta() {
         .reduce((sum, venta) => sum + venta.total, 0),
     }))
     const ventasEfectivo = porMetodo.find((metodo) => metodo.nombre === 'Efectivo')?.total || 0
+    const fondoInicial = Number(arqueoResumen?.fondoInicial ?? 0)
+    const totalEfectivoEsperado = Number(arqueoResumen?.totalEfectivoEsperado ?? (fondoInicial + ventasEfectivo))
+    const sencilloDejado = Number(arqueoResumen?.sencilloDejado ?? fondoInicial)
+    const efectivoRetirado = Number(arqueoResumen?.efectivoRetirado ?? Math.max(0, totalEfectivoEsperado - sencilloDejado))
+    const efectivoReal = Number(arqueoResumen?.efectivoReal ?? totalEfectivoEsperado)
+    const diferencia = Number(arqueoResumen?.diferencia ?? (efectivoReal - totalEfectivoEsperado))
 
     return {
       fecha: new Date().toLocaleDateString('es-GT'),
-      turno: 'Actual',
-      vendedor: 'Usuario actual',
+      turno: 'Semanal',
+      vendedor: arqueoResumen?.usuario || 'Usuario actual',
       porMetodo,
       totalVentas,
-      efectivoInicial: 0,
-      efectivoEsperado: ventasEfectivo,
-      efectivoReal: ventasEfectivo,
-      diferencia: 0,
+      ventasEfectivo,
+      fondoInicial,
+      totalEfectivoEsperado,
+      sencilloDejado,
+      efectivoRetirado,
+      efectivoReal,
+      diferencia,
+      observaciones: arqueoResumen?.observaciones || '',
       transacciones: arqueoResumen?.transacciones ?? ventasDelDia.length,
     }
   }, [arqueoResumen, ventasDelDia, metodosPago])
 
-  const confirmarArqueo = async () => {
+  const openArqueoModal = () => {
+    const defaultSencillo = arqueoCaja.sencilloDejado > 0
+      ? arqueoCaja.sencilloDejado
+      : (arqueoCaja.fondoInicial > 0 ? arqueoCaja.fondoInicial : 200)
+    setArqueoForm({
+      sencilloDejado: String(defaultSencillo),
+      efectivoReal: String(arqueoCaja.totalEfectivoEsperado || ''),
+      observaciones: '',
+    })
+    openModal('arqueo')
+  }
+
+  const handleConfirmarArqueo = async (e) => {
+    e?.preventDefault()
     try {
       setIsConfirmingArqueo(true)
-      const confirmado = await confirmarArqueoCaja(arqueoPeriodo.periodoInicio, arqueoPeriodo.periodoFin)
+      setErrorMsg('')
+      const sencilloDejadoNum = Number(arqueoForm.sencilloDejado || 0)
+      if (Number.isNaN(sencilloDejadoNum) || sencilloDejadoNum < 0) {
+        setErrorMsg('El sencillo a dejar en caja debe ser un número mayor o igual a 0.')
+        return
+      }
+
+      const efectivoRealNum = arqueoForm.efectivoReal !== '' && !Number.isNaN(Number(arqueoForm.efectivoReal))
+        ? Number(arqueoForm.efectivoReal)
+        : null
+
+      const confirmado = await confirmarArqueoCaja(arqueoPeriodo.periodoInicio, arqueoPeriodo.periodoFin, {
+        sencilloDejado: sencilloDejadoNum,
+        efectivoReal: efectivoRealNum,
+        observaciones: arqueoForm.observaciones,
+      })
+
       setArqueoResumen(confirmado)
       setArqueoConfirmado(true)
+      closeModal()
+      setSuccessTitle('Arqueo semanal confirmado')
+      setSuccessSubtitle('Cierre de caja semanal')
+      setSuccessMsg(`Arqueo semanal confirmado correctamente. Se reservaron Q${sencilloDejadoNum.toFixed(2)} de sencillo en caja para la siguiente semana.`)
       toast.success('Arqueo semanal confirmado correctamente.')
+      notifyDataChange('caja')
     } catch (error) {
       setErrorMsg(error.message || 'No fue posible confirmar el arqueo.')
     } finally {
@@ -345,7 +447,7 @@ function PuntoVenta() {
   }
 
   const calcularSubtotal = () => {
-    return carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0)
+    return carrito.reduce((sum, item) => sum + (Number(item.precio || 0) * Number(item.cantidad || 0)), 0)
   }
 
   const calcularIVA = () => {
@@ -366,6 +468,15 @@ function PuntoVenta() {
     setErrorMsg('')
     setSuccessMsg('')
     setModalType(type)
+    if (type === 'pago') {
+      setClienteSeleccionadoId('')
+      setNecesitaFactura(false)
+      setDatosFactura({
+        nit: '',
+        nombreCliente: '',
+        numeroTelefono: '',
+      })
+    }
     setShowModal(true)
   }
 
@@ -373,7 +484,6 @@ function PuntoVenta() {
     setShowModal(false)
     setModalType('')
     setErrorMsg('')
-    setSuccessMsg('')
     setNecesitaFactura(false)
     setDatosFactura({
       nit: '',
@@ -448,6 +558,10 @@ function PuntoVenta() {
           .sort((a, b) => a.nombre.localeCompare(b.nombre))
       })
       resetClienteForm()
+      closeModal()
+      setSuccessTitle('Cliente guardado')
+      setSuccessSubtitle('Directorio de clientes')
+      setSuccessMsg(mensajeExito)
       toast.success(mensajeExito)
     } catch (error) {
       setErrorMsg(error.message || 'No fue posible guardar el cliente.')
@@ -501,11 +615,11 @@ function PuntoVenta() {
       const venta = await createVentaPos({
         metodoPago,
         clienteId: clienteSeleccionadoId ? Number(clienteSeleccionadoId) : null,
-        cliente: clientes.find((cliente) => String(cliente.id) === String(clienteSeleccionadoId))?.nombre || datosFactura.nombreCliente || null,
+        cliente: clientes.find((cliente) => String(cliente.id) === String(clienteSeleccionadoId))?.nombre || (necesitaFactura ? datosFactura.nombreCliente : null) || null,
         necesitaFactura,
-        nit: datosFactura.nit || null,
-        nombreCliente: datosFactura.nombreCliente || null,
-        numeroTelefono: datosFactura.numeroTelefono || null,
+        nit: necesitaFactura ? (datosFactura.nit || null) : null,
+        nombreCliente: necesitaFactura ? (datosFactura.nombreCliente || null) : null,
+        numeroTelefono: necesitaFactura ? (datosFactura.numeroTelefono || null) : null,
         items: carrito.map((item) => ({
           recetaId: item.id,
           cantidad: item.cantidad,
@@ -513,12 +627,23 @@ function PuntoVenta() {
         })),
       })
 
-      setSuccessMsg(`Venta ${venta.ticket} registrada. Inventario descontado según BOM.`)
+      closeModal()
+      setSuccessTitle('¡Venta realizada con éxito!')
+      setSuccessSubtitle(venta?.ticket ? `Ticket ${venta.ticket}` : 'Punto de Venta')
+      const totalFormateado = Number(venta?.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const clienteNombre = venta?.cliente || (clienteSeleccionadoId ? clientes.find((c) => String(c.id) === String(clienteSeleccionadoId))?.nombre : null) || (necesitaFactura ? datosFactura.nombreCliente : null) || 'Cliente General'
+      const itemsCount = carrito.reduce((sum, item) => sum + (item.cantidad || 0), 0)
+
+      setSuccessMsg(`Total: Q${totalFormateado}\n${itemsCount} ${itemsCount === 1 ? 'unidad vendida' : 'unidades vendidas'} · Método: ${metodoPago}\nCliente: ${clienteNombre}\n\nInventario descontado correctamente según BOM.`)
+      toast.success(`Venta ${venta?.ticket || ''} registrada con éxito.`)
       vaciarCarrito()
-      await loadData()
-      setTimeout(() => {
-        closeModal()
-      }, 1800)
+      setVentas((prev) => [venta, ...prev])
+      setIsProcessing(false)
+      notifyDataChange('ventas')
+      // Sincronización en segundo plano sin bloquear la pantalla
+      loadData(false).catch(() => {})
+      cargarArqueo().catch(() => {})
+      return
     } catch (error) {
       setErrorMsg(error.message || 'No fue posible confirmar la venta.')
     } finally {
@@ -527,13 +652,15 @@ function PuntoVenta() {
   }
 
   return (
-    <div className="dashboard-shell p-4 md:p-6">
-      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+    <div className="dashboard-shell space-y-6">
+      <ModuleHeader title="Punto de Venta (POS)" description="Venta con consumo directo de materias primas desde el BOM" eyebrow="Ventas" icon={ReceiptText} />
+
+      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5 mb-6">
         {[
-          { label: 'Ventas hoy', value: `Q${arqueoCaja.totalVentas.toFixed(2)}`, change: '+12%', detail: 'vs. ayer', icon: Wallet, tone: 'green' },
-          { label: 'Transacciones', value: String(arqueoCaja.transacciones), change: '+9%', detail: 'en el día', icon: ReceiptText, tone: 'blue' },
-          { label: 'Ticket promedio', value: `Q${arqueoCaja.transacciones ? (arqueoCaja.totalVentas / arqueoCaja.transacciones).toFixed(2) : '0.00'}`, change: '+4%', detail: 'promedio', icon: TrendingUp, tone: 'purple' },
-          { label: 'Caja actual', value: `Q${arqueoCaja.totalVentas.toFixed(2)}`, change: 'Saldado', detail: 'cerrado al día', icon: WalletCards, tone: 'orange' },
+          { label: 'Ventas hoy', value: `Q${kpisHoy.totalVentas.toFixed(2)}`, change: '+12%', detail: 'vs. ayer', icon: Wallet, tone: 'green' },
+          { label: 'Transacciones', value: String(kpisHoy.transacciones), change: '+9%', detail: 'en el día', icon: ReceiptText, tone: 'blue' },
+          { label: 'Ticket promedio', value: `Q${kpisHoy.ticketPromedio.toFixed(2)}`, change: '+4%', detail: 'promedio', icon: TrendingUp, tone: 'purple' },
+          { label: 'Caja actual', value: `Q${kpisHoy.cajaActual.toFixed(2)}`, change: 'Saldado', detail: 'efectivo en caja', icon: WalletCards, tone: 'orange' },
         ].map((metric) => {
           const Icon = metric.icon
 
@@ -557,15 +684,13 @@ function PuntoVenta() {
         })}
       </div>
 
-      <ModuleHeader title="Punto de Venta (POS)" description="Venta con consumo directo de materias primas desde el BOM" eyebrow="Ventas" icon={ReceiptText} />
-
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="flex space-x-4 overflow-x-auto whitespace-nowrap">
+      <div className="mb-6 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto scrollbar-none touch-scroll whitespace-nowrap">
           <button
             onClick={() => setActiveTab('venta')}
-            className={`pb-3 px-2 font-medium transition-colors ${
+            className={`pb-3 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-colors shrink-0 ${
               activeTab === 'venta'
-                ? 'border-b-2 border-cyan-500 text-cyan-600'
+                ? 'border-b-2 border-cyan-500 text-cyan-600 font-semibold'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -573,9 +698,9 @@ function PuntoVenta() {
           </button>
           <button
             onClick={() => setActiveTab('historial')}
-            className={`pb-3 px-2 font-medium transition-colors ${
+            className={`pb-3 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-colors shrink-0 ${
               activeTab === 'historial'
-                ? 'border-b-2 border-cyan-500 text-cyan-600'
+                ? 'border-b-2 border-cyan-500 text-cyan-600 font-semibold'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -583,9 +708,9 @@ function PuntoVenta() {
           </button>
           <button
             onClick={() => setActiveTab('caja')}
-            className={`pb-3 px-2 font-medium transition-colors ${
+            className={`pb-3 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-colors shrink-0 ${
               activeTab === 'caja'
-                ? 'border-b-2 border-cyan-500 text-cyan-600'
+                ? 'border-b-2 border-cyan-500 text-cyan-600 font-semibold'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -593,15 +718,26 @@ function PuntoVenta() {
           </button>
           <button
             onClick={() => setActiveTab('clientes')}
-            className={`pb-3 px-2 font-medium transition-colors ${
+            className={`pb-3 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-colors shrink-0 ${
               activeTab === 'clientes'
-                ? 'border-b-2 border-cyan-500 text-cyan-600'
+                ? 'border-b-2 border-cyan-500 text-cyan-600 font-semibold'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             Clientes Frecuentes
           </button>
         </nav>
+
+        <a
+          href="https://farm3.sat.gob.gt/menu/login.jsf"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="self-start sm:self-auto mb-2 sm:mb-1.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-md transition-all active:scale-95 shrink-0"
+          title="Acceso directo a la Agencia Virtual de la SAT para facturación FEL"
+        >
+          <ExternalLink size={14} />
+          <span>Portal SAT</span>
+        </a>
       </div>
 
       {errorMsg && !showModal && (
@@ -645,7 +781,7 @@ function PuntoVenta() {
                 <h3 className="text-lg font-semibold text-gray-800">Productos de Venta</h3>
                 {isLoading && <span className="text-sm text-gray-500">Cargando...</span>}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {productosFiltrados.map((producto) => {
                   const bomCompleto = hasBomCompleto(producto)
                   return (
@@ -654,19 +790,48 @@ function PuntoVenta() {
                       type="button"
                       onClick={() => agregarAlCarrito(producto)}
                       disabled={!bomCompleto}
-                      className="text-left bg-gradient-to-br from-cyan-50 to-blue-50 border-2 border-cyan-200 rounded-xl p-4 hover:shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="group text-left bg-white border border-gray-200 hover:border-cyan-500 rounded-2xl p-3 sm:p-4 hover:shadow-lg transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-3 sm:gap-4 relative min-h-[110px] sm:min-h-[120px]"
                     >
-                      <h4 className="font-semibold text-gray-800 text-sm mb-1">{producto.nombre}</h4>
-                      <p className="text-xs text-gray-500 mb-2">{producto.codigo}</p>
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-lg font-bold text-cyan-700">Q{producto.precio.toFixed(2)}</span>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          bomCompleto ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {bomCompleto ? `${producto.ingredientes.length} insumos` : 'BOM incompleto'}
-                        </span>
+                      {/* Imagen del producto al lado izquierdo - tamaño ampliado */}
+                      <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-xl bg-gray-50 border border-gray-200/80 shrink-0 overflow-hidden relative flex items-center justify-center shadow-xs">
+                        {producto.imagenUrl ? (
+                          <img
+                            src={producto.imagenUrl}
+                            alt={producto.nombre}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-gray-400 gap-1.5 p-2">
+                            <Package className="w-7 h-7 sm:w-8 sm:h-8 text-gray-300" />
+                            <span className="text-[11px] sm:text-xs text-gray-400 font-medium">Sin foto</span>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-600">{producto.presentacion || 'Sin presentación'}</p>
+
+                      {/* Información del producto al lado derecho */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-xs font-mono text-gray-400 truncate">{producto.codigo}</span>
+                            <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 ${
+                              bomCompleto ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {bomCompleto ? `${producto.ingredientes.length} insumos` : 'BOM incompleto'}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-gray-900 text-base leading-snug line-clamp-2 group-hover:text-cyan-600 transition-colors">
+                            {producto.nombre}
+                          </h4>
+                          {producto.presentacion && (
+                            <p className="text-xs text-gray-500 mt-1 font-medium truncate">{producto.presentacion}</p>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-baseline mt-3 pt-2 border-t border-gray-100">
+                          <span className="text-xs text-gray-400 font-medium">Precio</span>
+                          <span className="text-lg sm:text-xl font-extrabold text-cyan-700">Q{producto.precio.toFixed(2)}</span>
+                        </div>
+                      </div>
                     </button>
                   )
                 })}
@@ -680,86 +845,169 @@ function PuntoVenta() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-4 md:p-6 sticky top-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Carrito</h3>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 md:p-5 sticky top-6">
+              {/* Header del carrito */}
+              <div className="flex justify-between items-center pb-3.5 mb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-50 border border-cyan-100 flex items-center justify-center text-cyan-600">
+                    <ShoppingCart className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800 leading-none">Carrito</h3>
+                    {carrito.length > 0 && (
+                      <span className="text-[11px] text-slate-400 font-medium mt-0.5 block">
+                        {carrito.reduce((acc, item) => acc + item.cantidad, 0)} {carrito.reduce((acc, item) => acc + item.cantidad, 0) === 1 ? 'artículo' : 'artículos'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 {carrito.length > 0 && (
                   <button
+                    type="button"
                     onClick={vaciarCarrito}
-                    className="text-sm text-red-600 hover:text-red-800"
+                    className="text-xs font-semibold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1 active:scale-95"
+                    title="Vaciar todo el carrito"
                   >
-                    Vaciar
+                    <Trash2 size={13} />
+                    <span>Vaciar</span>
                   </button>
                 )}
               </div>
 
               {carrito.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <p>Carrito vacío</p>
-                  <p className="text-sm mt-2">Selecciona productos para vender</p>
+                <div className="text-center py-10 px-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 my-2">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-50 border border-cyan-100 flex items-center justify-center mx-auto mb-2.5 text-cyan-600">
+                    <ShoppingCart className="w-6 h-6 opacity-80" />
+                  </div>
+                  <p className="font-bold text-slate-700 text-sm">Tu carrito está vacío</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-[200px] mx-auto">
+                    Selecciona productos del catálogo para agregarlos a la orden
+                  </p>
                 </div>
               ) : (
                 <>
-                  <div className="space-y-3 mb-6 max-h-64 overflow-y-auto">
+                  {/* Lista de productos */}
+                  <div className="space-y-2.5 mb-4 max-h-[340px] overflow-y-auto pr-1 touch-scroll">
                     {carrito.map((item) => (
-                      <div key={item.id} className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-gray-800 text-sm">{item.nombre}</h4>
-                            <p className="text-xs text-gray-500">Q{item.precio.toFixed(2)} c/u</p>
+                      <div
+                        key={item.id}
+                        className="bg-slate-50/70 hover:bg-slate-50 border border-slate-200/80 rounded-xl p-3 transition-all duration-150 shadow-2xs"
+                      >
+                        <div className="flex items-start justify-between gap-2.5 mb-2.5">
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            {item.imagenUrl ? (
+                              <img
+                                src={item.imagenUrl}
+                                alt={item.nombre}
+                                className="w-11 h-11 rounded-lg object-cover border border-slate-200/90 bg-white shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-lg bg-slate-200/80 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                                <Package className="w-5 h-5 text-slate-400" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-bold text-slate-800 text-sm leading-snug line-clamp-1">
+                                {item.nombre}
+                              </h4>
+                              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                Q{Number(item.precio || 0).toFixed(2)} c/u
+                              </p>
+                            </div>
                           </div>
                           <button
+                            type="button"
                             onClick={() => eliminarDelCarrito(item.id)}
-                            className="text-red-500 hover:text-red-700 ml-2"
+                            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors ml-1 shrink-0"
+                            title="Eliminar producto"
                           >
-                            X
+                            <Trash2 size={14} />
                           </button>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
+
+                        <div className="flex justify-between items-center pt-2 border-t border-slate-200/60">
+                          {/* Selector de cantidad */}
+                          <div className="inline-flex items-center bg-white border border-slate-200 rounded-lg shadow-2xs p-0.5 gap-1">
                             <button
+                              type="button"
                               onClick={() => cambiarCantidad(item.id, item.cantidad - 1)}
-                              className="w-7 h-7 bg-gray-200 rounded hover:bg-gray-300 font-bold"
+                              className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-90 transition-all font-bold cursor-pointer"
+                              title="Restar"
                             >
-                              -
+                              <Minus size={13} strokeWidth={2.5} />
                             </button>
-                            <span className="w-8 text-center font-semibold">{item.cantidad}</span>
+                            <span className="min-w-[28px] text-center text-xs font-extrabold text-slate-800">
+                              {item.cantidad}
+                            </span>
                             <button
+                              type="button"
                               onClick={() => cambiarCantidad(item.id, item.cantidad + 1)}
-                              className="w-7 h-7 bg-cyan-500 text-white rounded hover:bg-cyan-600 font-bold"
+                              className="w-7 h-7 flex items-center justify-center rounded-md bg-cyan-500 hover:bg-cyan-600 text-white shadow-2xs active:scale-90 transition-all font-bold cursor-pointer"
+                              title="Sumar"
                             >
-                              +
+                              <Plus size={13} strokeWidth={2.5} />
                             </button>
                           </div>
-                          <span className="font-bold text-gray-800">
-                            Q{(item.precio * item.cantidad).toFixed(2)}
-                          </span>
+
+                          {/* Subtotal del ítem */}
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block leading-tight">
+                              Subtotal
+                            </span>
+                            <span className="text-sm font-black text-slate-900">
+                              Q{(Number(item.precio || 0) * Number(item.cantidad || 0)).toFixed(2)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  <div className="border-t pt-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-semibold">Q{calcularSubtotal().toFixed(2)}</span>
+                  {/* Resumen de totales */}
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
+                    <div className="flex justify-between items-center text-xs text-slate-600">
+                      <span className="font-medium">Subtotal</span>
+                      <span className="font-bold text-slate-800">Q{calcularSubtotal().toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">{ivaLabel}:</span>
-                      <span className="font-semibold">Q{calcularIVA().toFixed(2)}</span>
+
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-600 font-medium flex items-center gap-1.5">
+                        <span>{ivaActivo ? `IVA (${ivaPorcentaje.toFixed(1)}%)` : 'IVA'}</span>
+                        {!ivaActivo && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-500 font-semibold">
+                            Desactivado
+                          </span>
+                        )}
+                      </span>
+                      <span className={`font-bold ${ivaActivo ? 'text-slate-800' : 'text-slate-400'}`}>
+                        Q{calcularIVA().toFixed(2)}
+                      </span>
                     </div>
-                    <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                      <span>Total:</span>
-                      <span className="text-cyan-700">Q{calcularTotal().toFixed(2)}</span>
+
+                    <div className="border-t border-slate-200/90 pt-2.5 flex justify-between items-baseline">
+                      <div>
+                        <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-500 block">
+                          Total a cobrar
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">GTQ (Quetzales)</span>
+                      </div>
+                      <span className="text-2xl font-black text-cyan-700 tracking-tight">
+                        Q{calcularTotal().toFixed(2)}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="mt-6 space-y-2">
+                  {/* Botón de acción */}
+                  <div className="mt-3">
                     <button
+                      type="button"
                       onClick={() => openModal('pago')}
-                      className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold rounded-lg hover:shadow-lg transition-shadow"
+                      className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-600 hover:via-emerald-700 hover:to-teal-700 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group cursor-pointer"
                     >
-                      Procesar Pago
+                      <WalletCards className="w-5 h-5 transition-transform group-hover:scale-110" />
+                      <span>Procesar Pago</span>
+                      <ArrowRight className="w-4 h-4 ml-auto opacity-70 group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>
                 </>
@@ -769,21 +1017,22 @@ function PuntoVenta() {
         </div>
       )}
 
+
       {activeTab === 'historial' && (
         <div>
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => setReporteOpen(true)}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-colors flex items-center gap-2 text-sm font-medium"
+                className="flex-1 sm:flex-initial px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm font-medium"
               >
                 <FileDown size={16} aria-hidden="true" />
                 Reporte
               </button>
               <button
                 onClick={loadData}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 self-start"
+                className="flex-1 sm:flex-initial px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-xs sm:text-sm font-medium"
               >
                 Recargar
               </button>
@@ -848,7 +1097,7 @@ function PuntoVenta() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+          <div className="bg-white rounded-lg shadow-md overflow-x-auto touch-scroll">
             <table className="min-w-full">
               <thead className="bg-gradient-to-r from-cyan-50 to-blue-50">
                 <tr>
@@ -913,67 +1162,167 @@ function PuntoVenta() {
       )}
 
       {activeTab === 'caja' && (
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-md p-4 md:p-8">
-            <div className="flex justify-between items-center mb-6 pb-4 border-b">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 md:p-8">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-5 border-b border-slate-100">
               <div>
-                <h3 className="text-xl font-bold text-gray-800">Arqueo de Caja</h3>
-                <p className="text-sm text-gray-600">
-                  Período semanal: domingo 6:00 PM a domingo 6:00 PM
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {arqueoPeriodo.periodoInicio.toLocaleString('es-GT')} — {arqueoPeriodo.periodoFin.toLocaleString('es-GT')}
-                </p>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-50 border border-cyan-100 flex items-center justify-center text-cyan-600">
+                    <Coins className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">Arqueo y Liquidación Semanal</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Período: {arqueoPeriodo.periodoInicio.toLocaleDateString('es-GT')} al {arqueoPeriodo.periodoFin.toLocaleDateString('es-GT')} (6:00 PM)
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  arqueoConfirmado ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                <span className={`rounded-full px-3 py-1 text-xs font-bold inline-flex items-center gap-1.5 ${
+                  arqueoConfirmado ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {arqueoConfirmado ? 'Confirmado' : 'Pendiente'}
+                  {arqueoConfirmado ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Arqueo Confirmado
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      Pendiente de Cierre
+                    </>
+                  )}
                 </span>
-                <button
-                  type="button"
-                  onClick={confirmarArqueo}
-                  disabled={arqueoConfirmado || isConfirmingArqueo}
-                  className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  {isConfirmingArqueo ? 'Confirmando...' : arqueoConfirmado ? 'Arqueo confirmado' : 'Confirmar arqueo'}
-                </button>
+                {!arqueoConfirmado ? (
+                  <button
+                    type="button"
+                    onClick={openArqueoModal}
+                    disabled={isConfirmingArqueo}
+                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <Coins className="w-4 h-4" />
+                    <span>Realizar Arqueo y Liquidación</span>
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400 font-medium italic">
+                    Período cerrado
+                  </span>
+                )}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-xs text-gray-600 mb-1">Fecha</p>
-                <p className="font-semibold text-gray-900">{arqueoCaja.fecha}</p>
+            {/* Resumen de Ventas */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-6">
+              <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-xl">
+                <p className="text-xs font-medium text-slate-500 mb-1">Total de Ventas</p>
+                <p className="text-2xl font-black text-cyan-700">Q{arqueoCaja.totalVentas.toFixed(2)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{arqueoCaja.transacciones} transacciones</p>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-xs text-gray-600 mb-1">Turno</p>
-                <p className="font-semibold text-gray-900">{arqueoCaja.turno}</p>
+              <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-xl">
+                <p className="text-xs font-medium text-slate-500 mb-1">Ventas en Efectivo</p>
+                <p className="text-2xl font-black text-emerald-700">Q{arqueoCaja.ventasEfectivo.toFixed(2)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Cobrado en ventanilla</p>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-xs text-gray-600 mb-1">Transacciones</p>
-                <p className="font-semibold text-gray-900">{arqueoCaja.transacciones}</p>
+              <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-xl">
+                <p className="text-xs font-medium text-slate-500 mb-1">Ventas Transferencia</p>
+                <p className="text-2xl font-black text-indigo-700">
+                  Q{(arqueoCaja.porMetodo.find(m => m.nombre === 'Transferencia')?.total || 0).toFixed(2)}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">Directo a cuenta</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              {arqueoCaja.porMetodo.map((metodo) => (
-                <div key={metodo.nombre} className="bg-cyan-50 border-2 border-cyan-200 rounded-lg p-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">{metodo.nombre}</p>
-                  <p className="text-xl md:text-2xl font-bold text-cyan-700">Q{metodo.total.toFixed(2)}</p>
+            {/* SECCIÓN CLAVE: Control de Efectivo y Sencillo */}
+            <div className="bg-gradient-to-br from-slate-50 via-slate-50 to-cyan-50/40 border border-slate-200 rounded-2xl p-5 md:p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <WalletCards className="w-5 h-5 text-cyan-600" />
+                  <h4 className="font-bold text-slate-800 text-base">Control de Gaveta y Sencillo (Fondo para Cambio)</h4>
                 </div>
-              ))}
-            </div>
-
-            <div className="bg-gradient-to-r from-cyan-50 to-blue-50 border-2 border-cyan-300 rounded-lg p-4 md:p-6">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Total de Ventas</p>
-                  <p className="text-xs text-gray-500">{arqueoCaja.transacciones} transacciones</p>
-                </div>
-                <p className="text-2xl md:text-4xl font-bold text-cyan-700">Q{arqueoCaja.totalVentas.toFixed(2)}</p>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800">
+                  Efectivo Físico
+                </span>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-4">
+                {/* 1. Sencillo Inicial */}
+                <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span className="font-medium">Sencillo de Apertura</span>
+                    <Coins className="w-3.5 h-3.5 text-amber-500" />
+                  </div>
+                  <p className="text-xl font-black text-slate-800">Q{arqueoCaja.fondoInicial.toFixed(2)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Fondo dejado la semana anterior</p>
+                </div>
+
+                {/* 2. Ventas Efectivo */}
+                <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span className="font-medium">(+) Ventas en Efectivo</span>
+                    <Banknote className="w-3.5 h-3.5 text-emerald-500" />
+                  </div>
+                  <p className="text-xl font-black text-emerald-600">Q{arqueoCaja.ventasEfectivo.toFixed(2)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Ingresado por cobros</p>
+                </div>
+
+                {/* 3. Total Esperado */}
+                <div className="bg-white border-2 border-cyan-300 rounded-xl p-3.5 shadow-2xs bg-gradient-to-br from-cyan-50/50 to-white">
+                  <div className="flex items-center justify-between text-xs text-cyan-700 mb-1">
+                    <span className="font-bold">(=) Total Efectivo en Caja</span>
+                    <Wallet className="w-3.5 h-3.5 text-cyan-600" />
+                  </div>
+                  <p className="text-xl font-black text-cyan-700">Q{arqueoCaja.totalEfectivoEsperado.toFixed(2)}</p>
+                  <p className="text-[10px] text-cyan-600 font-medium mt-0.5">Dinero total en gaveta</p>
+                </div>
+              </div>
+
+              {/* Resultado del Cierre (Confirmado vs Pendiente) */}
+              {arqueoConfirmado ? (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <h5 className="font-bold text-emerald-900 text-sm">Liquidación Confirmada</h5>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div className="bg-white/80 rounded-lg p-3 border border-emerald-200/60">
+                      <span className="text-xs text-slate-500 block">Sencillo que se quedó en caja (para cambio):</span>
+                      <span className="text-lg font-black text-amber-700">Q{arqueoCaja.sencilloDejado.toFixed(2)}</span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">Fondo disponible para la siguiente semana</span>
+                    </div>
+                    <div className="bg-white/80 rounded-lg p-3 border border-emerald-200/60">
+                      <span className="text-xs text-slate-500 block">Efectivo retirado / liquidado (depósito):</span>
+                      <span className="text-lg font-black text-emerald-700">Q{arqueoCaja.efectivoRetirado.toFixed(2)}</span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">Entregado / depositado en banco</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-emerald-200/60 flex flex-wrap justify-between items-center text-xs text-emerald-800">
+                    <span>Responsable: <strong>{arqueoCaja.vendedor}</strong></span>
+                    {arqueoCaja.observaciones && (
+                      <span className="italic">Nota: {arqueoCaja.observaciones}</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-900">Período listo para arqueo</p>
+                      <p className="text-xs text-amber-800 mt-0.5">
+                        Al confirmar el arqueo podrás indicar cuánto sencillo dejas en la gaveta para dar cambio la próxima semana y cuánto efectivo retiras para liquidar.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openArqueoModal}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs shrink-0 cursor-pointer active:scale-95 transition-all"
+                  >
+                    Abrir Arqueo
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1079,7 +1428,7 @@ function PuntoVenta() {
             {clientes.length === 0 ? (
               <p className="py-8 text-center text-gray-500">Aún no hay clientes frecuentes registrados.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto touch-scroll">
                 <table className="min-w-full text-sm">
                   <thead className="border-b bg-gray-50 text-left text-xs uppercase text-gray-600">
                     <tr><th className="px-4 py-3">Código</th><th className="px-4 py-3">Nombre</th><th className="px-4 py-3">NIT</th><th className="px-4 py-3">Teléfono</th><th className="px-4 py-3 text-right">Acciones</th></tr>
@@ -1149,7 +1498,7 @@ function PuntoVenta() {
                 <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
                   <h4 className="font-bold text-gray-800">Detalle del ticket</h4>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto touch-scroll">
                   <table className="min-w-full">
                     <thead className="bg-white border-b border-gray-200">
                       <tr>
@@ -1287,12 +1636,21 @@ function PuntoVenta() {
                     const cliente = clientes.find((item) => String(item.id) === String(id))
                     setClienteSeleccionadoId(id)
                     if (cliente) {
-                      setDatosFactura((previous) => ({
-                        ...previous,
+                      setDatosFactura({
                         nit: cliente.nit || '',
                         nombreCliente: cliente.nombre || '',
                         numeroTelefono: cliente.telefono || '',
-                      }))
+                      })
+                      if (cliente.nit) {
+                        setNecesitaFactura(true)
+                      }
+                    } else {
+                      setDatosFactura({
+                        nit: '',
+                        nombreCliente: '',
+                        numeroTelefono: '',
+                      })
+                      setNecesitaFactura(false)
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
@@ -1310,7 +1668,19 @@ function PuntoVenta() {
               </div>
 
               <div className="border-t pt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-3">¿Necesita Factura?</label>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-gray-700">¿Necesita Factura?</label>
+                  <a
+                    href="https://farm3.sat.gob.gt/menu/login.jsf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline"
+                    title="Abrir portal de la SAT para emitir factura"
+                  >
+                    <span>Portal SAT FEL</span>
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1339,6 +1709,19 @@ function PuntoVenta() {
 
               {necesitaFactura && (
                 <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="sm:col-span-2 flex items-center justify-between pb-1 border-b border-blue-200/60">
+                    <span className="text-xs font-semibold text-blue-800">Datos para Facturación Electrónica</span>
+                    <a
+                      href="https://farm3.sat.gob.gt/menu/login.jsf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium shadow-xs transition-colors"
+                      title="Ir a SAT Agencia Virtual"
+                    >
+                      <ExternalLink size={11} />
+                      <span>Ir a SAT</span>
+                    </a>
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">NIT *</label>
                     <input
@@ -1423,6 +1806,183 @@ function PuntoVenta() {
         </div>
       )}
 
+      {showModal && modalType === 'arqueo' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header del modal */}
+            <div className="bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-700 text-white px-6 py-4 flex-shrink-0">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-cyan-200" />
+                    <h3 className="text-lg font-bold">Arqueo y Liquidación Semanal</h3>
+                  </div>
+                  <p className="text-xs text-cyan-100 mt-0.5">
+                    Período: {arqueoPeriodo.periodoInicio.toLocaleDateString('es-GT')} al {arqueoPeriodo.periodoFin.toLocaleDateString('es-GT')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Cuerpo del formulario */}
+            <form onSubmit={handleConfirmarArqueo} className="p-5 sm:p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+                  {errorMsg}
+                </div>
+              )}
+
+              {/* Resumen del dinero disponible */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Sencillo de apertura (Fondo anterior):</span>
+                  <span className="font-bold text-slate-800">Q{arqueoCaja.fondoInicial.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Ventas en efectivo de la semana:</span>
+                  <span className="font-bold text-emerald-700">+Q{arqueoCaja.ventasEfectivo.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-black text-cyan-800">
+                  <span>Total Efectivo en Gaveta:</span>
+                  <span>Q{arqueoCaja.totalEfectivoEsperado.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Campo 1: Sencillo a dejar en caja */}
+              <div className="bg-cyan-50/70 border border-cyan-200 rounded-xl p-4">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Sencillo a dejar en caja para cambio (GTQ) *
+                </label>
+                <p className="text-[11px] text-slate-500 mb-2">
+                  Dinero que permanecerá en la gaveta como fondo de cambio para la siguiente semana.
+                </p>
+                <div className="relative mb-2">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Q</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={arqueoCaja.totalEfectivoEsperado}
+                    required
+                    value={arqueoForm.sencilloDejado}
+                    onChange={(e) => setArqueoForm({ ...arqueoForm, sencilloDejado: e.target.value })}
+                    className="w-full pl-8 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-base font-extrabold text-slate-900 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    placeholder="200.00"
+                  />
+                </div>
+                {/* Accesos rápidos */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-semibold mr-1">Sugeridos:</span>
+                  {[100, 200, 300, 500].map((monto) => (
+                    <button
+                      key={monto}
+                      type="button"
+                      onClick={() => setArqueoForm({ ...arqueoForm, sencilloDejado: String(monto) })}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                        Number(arqueoForm.sencilloDejado) === monto
+                          ? 'bg-cyan-600 text-white border-cyan-600'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      Q{monto}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cálculo en vivo de Efectivo a Retirar */}
+              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+                  Efectivo neto a retirar / liquidar
+                </span>
+                <div className="flex justify-between items-baseline mt-1">
+                  <span className="text-2xl font-black text-emerald-700">
+                    Q{Math.max(0, arqueoCaja.totalEfectivoEsperado - Number(arqueoForm.sencilloDejado || 0)).toFixed(2)}
+                  </span>
+                  <span className="text-xs text-emerald-700 font-medium">
+                    (Ventas retiradas para depósito)
+                  </span>
+                </div>
+              </div>
+
+              {/* Campo 2: Efectivo físico contado (Opcional) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Efectivo físico contado en gaveta (Opcional para cuadre)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Q</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={arqueoForm.efectivoReal}
+                    onChange={(e) => setArqueoForm({ ...arqueoForm, efectivoReal: e.target.value })}
+                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-cyan-500"
+                    placeholder={`Esperado: Q${arqueoCaja.totalEfectivoEsperado.toFixed(2)}`}
+                  />
+                </div>
+                {arqueoForm.efectivoReal !== '' && !Number.isNaN(Number(arqueoForm.efectivoReal)) && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold">
+                    {Number(arqueoForm.efectivoReal) === arqueoCaja.totalEfectivoEsperado ? (
+                      <span className="text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 size={13} /> Cuadre exacto (sin diferencias)
+                      </span>
+                    ) : Number(arqueoForm.efectivoReal) > arqueoCaja.totalEfectivoEsperado ? (
+                      <span className="text-blue-600 flex items-center gap-1">
+                        <ArrowRight size={13} /> Sobrante: +Q{(Number(arqueoForm.efectivoReal) - arqueoCaja.totalEfectivoEsperado).toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-rose-600 flex items-center gap-1">
+                        <AlertCircle size={13} /> Faltante: -Q{(arqueoCaja.totalEfectivoEsperado - Number(arqueoForm.efectivoReal)).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Campo 3: Observaciones */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Observaciones (Opcional)</label>
+                <textarea
+                  rows={2}
+                  value={arqueoForm.observaciones}
+                  onChange={(e) => setArqueoForm({ ...arqueoForm, observaciones: e.target.value })}
+                  placeholder="Notas sobre el cierre, denominaciones de billetes en sencillo, etc."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* Botones de acción */}
+              <div className="pt-2 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={isConfirmingArqueo}
+                  className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isConfirmingArqueo}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>{isConfirmingArqueo ? 'Confirmando...' : 'Confirmar Arqueo y Guardar Sencillo'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <ReporteModal
         open={reporteOpen}
         title="Reporte de ventas del punto de venta"
@@ -1431,6 +1991,19 @@ function PuntoVenta() {
         generating={generandoReporte}
         onGenerate={handleGenerarReporteVentas}
         onClose={() => setReporteOpen(false)}
+      />
+
+      <SuccessModal
+        isOpen={Boolean(successMsg)}
+        title={successTitle}
+        subtitle={successSubtitle}
+        message={successMsg}
+        buttonText="Aceptar"
+        onClose={() => {
+          setSuccessMsg('')
+          setSuccessTitle('Operación completada')
+          setSuccessSubtitle('Punto de Venta')
+        }}
       />
     </div>
   )

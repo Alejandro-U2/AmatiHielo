@@ -14,15 +14,15 @@ function Pagination({
   if (!showBar) return null
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-lg bg-gray-50 mt-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-4 py-3 rounded-lg bg-gray-50 mt-4">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {pageSize && onPageSizeChange && (
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-600">
             Mostrar
             <select
               value={pageSize}
               onChange={(event) => onPageSizeChange(Number(event.target.value))}
-              className="px-2 py-1 border border-gray-300 rounded-lg bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              className="px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>{size}</option>
@@ -31,19 +31,19 @@ function Pagination({
             por página
           </label>
         )}
-        <p className="text-sm text-gray-600">
+        <p className="text-xs sm:text-sm text-gray-600">
           Página {page} de {totalPages}
           {totalItems !== undefined ? ` · Total: ${totalItems}` : ''}
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto">
         <button
           type="button"
           onClick={() => onChange(1)}
           disabled={page === 1}
           title="Primera página"
-          className="p-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-1.5 sm:p-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ChevronsLeft size={16} aria-hidden="true" />
         </button>
@@ -52,7 +52,7 @@ function Pagination({
           onClick={() => onChange(Math.max(1, page - 1))}
           disabled={page === 1}
           title="Anterior"
-          className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Anterior
         </button>
@@ -61,7 +61,7 @@ function Pagination({
           onClick={() => onChange(Math.min(totalPages, page + 1))}
           disabled={page === totalPages}
           title="Siguiente"
-          className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Siguiente
         </button>
@@ -70,7 +70,7 @@ function Pagination({
           onClick={() => onChange(totalPages)}
           disabled={page === totalPages}
           title="Última página"
-          className="p-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-1.5 sm:p-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ChevronsRight size={16} aria-hidden="true" />
         </button>

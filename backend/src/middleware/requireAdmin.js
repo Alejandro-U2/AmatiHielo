@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 
 const ALLOWED_ROLES = new Set(['Superusuario', 'Administrador'])
+const authMode = (process.env.AUTH_MODE || process.env.VITE_AUTH_MODE || 'supabase').toLowerCase()
 
 export async function requireAdmin(req, res, next) {
   try {
@@ -9,6 +10,14 @@ export async function requireAdmin(req, res, next) {
 
     if (scheme !== 'Bearer' || !token) {
       return res.status(401).json({ message: 'Falta el token Bearer.' })
+    }
+
+    if (authMode === 'mock' && token === 'mock-token') {
+      req.auth = {
+        user: { id: '1', email: 'admin@local.test' },
+        profile: { nombre: 'Administrador', rol: 'Administrador', estado: 'Activo' },
+      }
+      return next()
     }
 
     const { data, error } = await supabaseAdmin.auth.getUser(token)

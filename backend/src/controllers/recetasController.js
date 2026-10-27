@@ -32,6 +32,11 @@ function normalizeRecetaPayload(body = {}) {
     payload.precio_sugerido = precioVenta
   }
 
+  if (body.imagenUrl !== undefined || body.imagen_url !== undefined) {
+    const rawImg = body.imagenUrl !== undefined ? body.imagenUrl : body.imagen_url
+    payload.imagen_url = typeof rawImg === 'string' ? rawImg.trim() || null : null
+  }
+
   return payload
 }
 
@@ -61,6 +66,78 @@ async function generarCodigoReceta() {
   return formatRecetaCodigo(maxNumero + 1)
 }
 
+const RECETAS_STORAGE_BUCKET = 'recetas-imagenes'
+
+function getExtensionFromMime(mime) {
+  switch (mime) {
+    case 'image/png': return 'png'
+    case 'image/jpeg':
+    case 'image/jpg': return 'jpg'
+    case 'image/webp': return 'webp'
+    case 'image/gif': return 'gif'
+    case 'image/svg+xml': return 'svg'
+    default: return 'png'
+  }
+}
+
+async function processRecetaImage(rawImg, codigo = 'receta') {
+  if (!rawImg || typeof rawImg !== 'string') return null
+  const trimmed = rawImg.trim()
+  if (!trimmed) return null
+
+  // If already a public URL, keep it
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  // If Base64 Data URL, upload to Supabase Storage
+  if (trimmed.startsWith('data:image/')) {
+    try {
+      const mimeMatch = trimmed.match(/^data:([^;]+);base64,/i)
+      const mime = mimeMatch ? mimeMatch[1].toLowerCase() : 'image/png'
+      const ext = getExtensionFromMime(mime)
+      const base64Data = trimmed.replace(/^data:[^;]+;base64,/i, '')
+      const buffer = Buffer.from(base64Data, 'base64')
+
+      const cleanCode = String(codigo || 'receta').toLowerCase().replace(/[^a-z0-9]/g, '_')
+      const fileName = `receta_${cleanCode}_${Date.now()}.${ext}`
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from(RECETAS_STORAGE_BUCKET)
+        .upload(fileName, buffer, {
+          contentType: mime,
+          upsert: true,
+        })
+
+      if (uploadError) {
+        console.error('[Recetas] Error al subir imagen a Supabase Storage:', uploadError)
+        return null
+      }
+
+      const { data: urlData } = supabaseAdmin.storage
+        .from(RECETAS_STORAGE_BUCKET)
+        .getPublicUrl(fileName)
+
+      return urlData?.publicUrl || null
+    } catch (err) {
+      console.error('[Recetas] Excepción al procesar imagen de receta:', err)
+      return null
+    }
+  }
+
+  return null
+}
+
+let hasImagenUrlCache = null
+export async function getRecetaFields(options = {}) {
+  const includeImages = options.includeImages === true
+  if (hasImagenUrlCache === null) {
+    const { error } = await supabaseAdmin.from('receta').select('imagen_url').limit(1)
+    hasImagenUrlCache = !error
+  }
+  const base = 'id, codigo, nombre, categoria, presentacion, costo_electricidad, costo_mano_obra, costo_agua, costo_local, subtotal_materia_prima, costos_produccion, costo_total, precio_sugerido, created_at, updated_at'
+  return (includeImages && hasImagenUrlCache) ? `${base}, imagen_url` : base
+}
 const RECETA_FIELDS = 'id, codigo, nombre, categoria, presentacion, costo_electricidad, costo_mano_obra, costo_agua, costo_local, subtotal_materia_prima, costos_produccion, costo_total, precio_sugerido, created_at, updated_at'
 
 async function recalcularCostosReceta(recetaId) {
@@ -108,9 +185,11 @@ async function recalcularCostosReceta(recetaId) {
 
 export async function listRecetas(req, res) {
   try {
+    const includeImages = req.query?.includeImages === 'true'
+    const fields = await getRecetaFields({ includeImages })
     const { data, error } = await supabaseAdmin
       .from('receta')
-      .select(RECETA_FIELDS)
+      .select(fields)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -210,6 +289,22 @@ export async function listUnidadesMedida(req, res) {
   }
 }
 
+export async function getRecetasCount(req, res) {
+  try {
+    const { count, error } = await supabaseAdmin
+      .from('receta')
+      .select('id', { count: 'exact', head: true })
+
+    if (error) {
+      return buildErrorResponse(res, error, 'No fue posible contar las recetas.')
+    }
+
+    return res.json({ count: count || 0 })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible contar las recetas.')
+  }
+}
+
 export async function getRecetaById(req, res) {
   const { id } = req.params
 
@@ -218,9 +313,11 @@ export async function getRecetaById(req, res) {
   }
 
   try {
+    const includeImages = req.query?.includeImages !== 'false'
+    const fields = await getRecetaFields({ includeImages })
     const { data, error } = await supabaseAdmin
       .from('receta')
-      .select(RECETA_FIELDS)
+      .select(fields)
       .eq('id', id)
       .single()
 
@@ -250,14 +347,23 @@ export async function createReceta(req, res) {
   }
 
   try {
+    const fields = await getRecetaFields({ includeImages: true })
+    const insertPayload = { ...payload }
+    if (!hasImagenUrlCache) {
+      delete insertPayload.imagen_url
+    }
+
     const codigo = payload.codigo || await generarCodigoReceta()
+    if (insertPayload.imagen_url && insertPayload.imagen_url.startsWith('data:image/')) {
+      insertPayload.imagen_url = await processRecetaImage(insertPayload.imagen_url, codigo)
+    }
     const { data, error } = await supabaseAdmin
       .from('receta')
       .insert({
-        ...payload,
+        ...insertPayload,
         codigo,
       })
-      .select(RECETA_FIELDS)
+      .select(fields)
       .single()
 
     if (error || !data) {
@@ -285,11 +391,20 @@ export async function updateReceta(req, res) {
   }
 
   try {
+    const fields = await getRecetaFields({ includeImages: true })
+    const updatePayload = { ...payload }
+    if (!hasImagenUrlCache) {
+      delete updatePayload.imagen_url
+    }
+
+    if (updatePayload.imagen_url && updatePayload.imagen_url.startsWith('data:image/')) {
+      updatePayload.imagen_url = await processRecetaImage(updatePayload.imagen_url, updatePayload.codigo || id)
+    }
     const { data, error } = await supabaseAdmin
       .from('receta')
-      .update(payload)
+      .update(updatePayload)
       .eq('id', id)
-      .select(RECETA_FIELDS)
+      .select(fields)
       .single()
 
     if (error || !data) {

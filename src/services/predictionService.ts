@@ -269,7 +269,7 @@ export function generateDemandPredictions({
     const availableStock = getProductCapacity(product)
     const stockRisk = hasLowIngredientStock(product)
     const salesDays = dailySales.size
-    const hasEnoughSales = salesDays >= 5
+    const hasEnoughSales = salesDays >= 1
     const hasStockData = availableStock !== null
     let weatherReason = hasWeather ? 'clima estable' : 'clima no disponible; solo tendencia histórica'
 
@@ -312,12 +312,14 @@ export function generateDemandPredictions({
       }),
       trend,
       keyFactor: !hasEnoughSales
-        ? `Historial insuficiente: ${salesDays} de 5 días con ventas requeridos`
+        ? 'Sin ventas registradas en los últimos 30 días'
         : !hasStockData
           ? 'Stock de ingredientes incompleto; no se sugiere producción'
           : stockRisk
             ? 'Stock bajo en ingredientes de receta'
-            : weatherReason,
+            : salesDays < 3
+              ? `${weatherReason} (historial preliminar: ${salesDays} ${salesDays === 1 ? 'día' : 'días'})`
+              : weatherReason,
       stockRisk: stockRisk || (availableStock !== null && availableStock < projectedDemand),
       growthRate: round(growthRate, 1),
       salesDays,

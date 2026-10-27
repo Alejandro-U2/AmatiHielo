@@ -403,6 +403,7 @@ function ChatbotProvider({ children }) {
         type: response.type === 'report_preview' ? 'report' : 'message',
         content: response.message || 'Esta información no está disponible en el sistema.',
         reportPreview: response.reportPreview ? { ...response.reportPreview, requestMessage: content } : null,
+        suggestions: Array.isArray(response.suggestions) ? response.suggestions : null,
       }
       if (response.action === 'generate_inventory_report') {
         const previousReport = [...messages].reverse().find((item) => item.reportPreview)?.reportPreview
@@ -547,7 +548,7 @@ function FormattedResponse({ content }) {
   </div>
 }
 
-function ChatMessage({ message, cubeState = 'normal', onReport, reportGenerating = false }) {
+function ChatMessage({ message, cubeState = 'normal', onReport, reportGenerating = false, onSuggestionClick, disabled = false }) {
   const isUser = message.role === 'user'
   return (
     <div className={`flex items-end gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -556,6 +557,21 @@ function ChatMessage({ message, cubeState = 'normal', onReport, reportGenerating
         <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-[.12em] text-gray-400">{isUser ? 'Tú' : 'AMATI'}</p>
         <div className={`rounded-2xl px-4 py-3 text-left text-sm leading-relaxed ${isUser ? 'rounded-br-md bg-cyan-50 text-gray-800' : 'rounded-bl-md border border-gray-200 bg-white text-gray-700 shadow-sm'}`}>
           <FormattedResponse content={message.content} />
+          {message.suggestions && message.suggestions.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 pt-2 border-t border-gray-100 dark:border-white/10">
+              {message.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onSuggestionClick && onSuggestionClick(suggestion)}
+                  className="rounded-full border border-cyan-200 dark:border-cyan-800/60 bg-cyan-50 dark:bg-cyan-950/50 px-2.5 py-1 text-xs font-medium text-cyan-800 dark:text-cyan-300 transition hover:bg-cyan-100 dark:hover:bg-cyan-900/60 hover:border-cyan-300 disabled:opacity-50"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
           {message.reportPreview && <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3.5">
             <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100 text-cyan-700"><BarChart3 size={16} /></span><div><p className="text-xs font-semibold text-gray-800">{message.reportPreview.title}</p><p className="text-[10px] text-gray-500">{message.reportPreview.totalProducts != null ? `${message.reportPreview.totalProducts} productos \u00b7 ${message.reportPreview.lowStockProducts} bajo m\u00ednimo` : message.reportPreview.summary}</p></div></div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-gray-600">{'\u00bfDeseas generarlo?'}</span><button type="button" onClick={() => onReport(message.reportPreview)} disabled={reportGenerating} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:cursor-wait disabled:opacity-60">{reportGenerating ? 'Generando\u2026' : 'Generar reporte'}</button></div>
@@ -574,7 +590,7 @@ function ChatLoadingState() {
 }
 
 function ChatMessages() {
-  const { messages, loading, reportGenerating, cubeState, handleReport } = useChat()
+  const { messages, loading, reportGenerating, cubeState, handleReport, sendMessage } = useChat()
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -583,7 +599,7 @@ function ChatMessages() {
   }, [messages, loading])
 
   return <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto bg-gray-50/70 px-4 py-5 sm:px-6 sm:py-6">
-    {messages.map((message, index) => <ChatMessage key={`${message.role}-${index}`} message={message} cubeState={index === messages.length - 1 && message.role === 'assistant' ? cubeState : 'normal'} onReport={handleReport} reportGenerating={reportGenerating} />)}
+    {messages.map((message, index) => <ChatMessage key={`${message.role}-${index}`} message={message} cubeState={index === messages.length - 1 && message.role === 'assistant' ? cubeState : 'normal'} onReport={handleReport} reportGenerating={reportGenerating} onSuggestionClick={sendMessage} disabled={loading} />)}
     {loading && <ChatLoadingState />}
   </div>
 }
@@ -686,7 +702,7 @@ export function FloatingChatbot({ showFloatingChatbot = true, currentModule }) {
       ref={triggerRef}
       type="button"
       onClick={() => { setHasOpened(true); setOpen((current) => !current) }}
-      className="ice-launcher group fixed bottom-4 right-4 z-40 flex h-[68px] w-[68px] items-center justify-center rounded-[22px] border border-white/90 bg-white/90 shadow-[0_10px_30px_rgba(35,116,160,.20)] backdrop-blur transition duration-200 hover:scale-[1.04] hover:shadow-[0_12px_34px_rgba(35,116,160,.28)] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+      className="ice-launcher group fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-40 flex h-11 w-11 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl border border-white/90 bg-white/95 shadow-[0_6px_20px_rgba(35,116,160,.18)] backdrop-blur transition duration-200 hover:scale-[1.05] hover:shadow-[0_10px_28px_rgba(35,116,160,.25)] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
       aria-label={open ? 'Cerrar asistente AMATI' : 'Abrir asistente AMATI'}
       aria-haspopup="dialog"
       aria-expanded={open}

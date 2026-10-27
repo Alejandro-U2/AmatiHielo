@@ -4,6 +4,8 @@ import { Moon, Sun } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
 import { forgotPassword, isAuthenticated, login } from '../services/authService'
 import { useTheme } from '../theme/useTheme'
+import IceLoadingScreen from './IceLoadingScreen'
+import IceTransitionScreen from './IceTransitionScreen'
 
 function Login() {
   const navigate = useNavigate()
@@ -20,8 +22,44 @@ function Login() {
   const [forgotStatus, setForgotStatus] = useState({ type: '', message: '' })
   const [showInactive, setShowInactive] = useState(false)
   const [inactiveUser, setInactiveUser] = useState('')
+  const [isEnteringSystem, setIsEnteringSystem] = useState(false)
+  const [isPreLoginLoading, setIsPreLoginLoading] = useState(() => {
+    const hash = window.location.hash || ''
+    const search = window.location.search || ''
+    if (
+      hash.includes('type=recovery') ||
+      hash.includes('access_token=') ||
+      search.includes('code=') ||
+      search.includes('type=recovery') ||
+      search.includes('token_hash=') ||
+      search.includes('error=') ||
+      hash.includes('error=')
+    ) {
+      return false
+    }
+    if (isAuthenticated()) {
+      return false
+    }
+    return true
+  })
 
   useEffect(() => {
+    // Si Supabase redirigió al Site URL (/) con tokens o código de recuperación, reenviar a /recuperar
+    const hash = window.location.hash || ''
+    const search = window.location.search || ''
+    if (
+      hash.includes('type=recovery') ||
+      hash.includes('access_token=') ||
+      search.includes('code=') ||
+      search.includes('type=recovery') ||
+      search.includes('token_hash=') ||
+      search.includes('error=') ||
+      hash.includes('error=')
+    ) {
+      navigate(`/recuperar${search}${hash}`, { replace: true })
+      return
+    }
+
     if (isAuthenticated()) {
       navigate('/dashboard', { replace: true })
     }
@@ -42,7 +80,7 @@ function Login() {
       await forgotPassword({ usernameOrEmail: forgotEmail })
       setForgotStatus({
         type: 'success',
-        message: 'Si el correo existe, se envió un enlace para restablecer la contraseña.',
+        message: 'Si el correo existe, se envió un enlace para restablecer la contraseña a tu bandeja de entrada.',
       })
     } catch (error) {
       setForgotStatus({ type: 'error', message: error.message || 'No fue posible enviar el enlace.' })
@@ -64,7 +102,8 @@ function Login() {
 
     try {
       await login({ username, password, rememberMe })
-      navigate('/dashboard', { replace: true })
+      sessionStorage.setItem('amati_just_logged_in', 'true')
+      setIsEnteringSystem(true)
     } catch (error) {
       if (error.inactive) {
         setInactiveUser(error.userName || username.trim())
@@ -79,7 +118,7 @@ function Login() {
   }
 
   return (
-    <div style={{
+    <div className="login-page-container" style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #0a2a3a 0%, #0d3d55 40%, #0a5570 70%, #0e7090 100%)',
       display: 'flex',
@@ -128,6 +167,20 @@ function Login() {
         @keyframes snowmanBob {
           0%, 100% { transform: translateY(0) rotate(var(--rot)); }
           50% { transform: translateY(-8px) rotate(var(--rot)); }
+        }
+
+        @media (max-width: 480px) {
+          .login-page-container {
+            padding: 1.25rem 0.85rem !important;
+          }
+          .login-card-container {
+            padding: 1.5rem 1.25rem !important;
+            border-radius: 20px !important;
+          }
+          .login-logo-box {
+            width: 70px !important;
+            height: 70px !important;
+          }
         }
       `}</style>
 
@@ -184,7 +237,7 @@ function Login() {
       ))}
 
       {/* Card */}
-      <div style={{
+      <div className="login-card-container" style={{
         background: 'rgba(255,255,255,0.05)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
@@ -199,7 +252,7 @@ function Login() {
 
         {/* Logo */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '1.75rem' }}>
-          <div style={{
+          <div className="login-logo-box" style={{
             width: 84,
             height: 84,
             borderRadius: 20,
@@ -442,8 +495,6 @@ function Login() {
             {isSubmitting ? 'Ingresando...' : 'Iniciar sesión'}
           </button>
         </form>
-
-       
       </div>
 
       {/* Modal Olvidé mi contraseña */}
@@ -465,20 +516,21 @@ function Login() {
         >
           <div
             style={{
-              background: '#ffffff',
+              background: theme === 'dark' ? '#18181f' : '#ffffff',
+              border: theme === 'dark' ? '1px solid #2b2b38' : 'none',
               borderRadius: 20,
               padding: '2rem',
               width: '100%',
               maxWidth: 440,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              boxShadow: theme === 'dark' ? '0 20px 60px rgba(0,0,0,0.8)' : '0 20px 60px rgba(0,0,0,0.4)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ marginBottom: '1.25rem' }}>
-              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: '#102a38', fontFamily: "'Outfit', sans-serif" }}>
+              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: theme === 'dark' ? '#e4e4e7' : '#102a38', fontFamily: "'Outfit', sans-serif" }}>
                 🔑 Recuperar contraseña
               </h2>
-              <p style={{ margin: 0, fontSize: 13, color: '#5a7180', fontFamily: "'Outfit', sans-serif" }}>
+              <p style={{ margin: 0, fontSize: 13, color: theme === 'dark' ? '#a1a1aa' : '#5a7180', fontFamily: "'Outfit', sans-serif" }}>
                 Ingresa tu usuario o correo. Te enviaremos un enlace para restablecer tu contraseña.
               </p>
             </div>
@@ -488,10 +540,10 @@ function Login() {
                 style={{
                   marginBottom: '1rem',
                   border: `1px solid ${forgotStatus.type === 'success' ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
-                  background: forgotStatus.type === 'success' ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
-                  color: forgotStatus.type === 'success' ? '#047857' : '#b91c1c',
+                  background: forgotStatus.type === 'success' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                  color: forgotStatus.type === 'success' ? (theme === 'dark' ? '#34d399' : '#047857') : (theme === 'dark' ? '#f87171' : '#b91c1c'),
                   borderRadius: 10,
-                  padding: '10px 12px',
+                  padding: '10px 14px',
                   fontSize: 13,
                   fontFamily: "'Outfit', sans-serif",
                 }}
@@ -502,7 +554,7 @@ function Login() {
 
             <form onSubmit={handleForgotSubmit}>
               <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#334e5e', marginBottom: 6, fontFamily: "'Outfit', sans-serif" }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: theme === 'dark' ? '#d4d4d8' : '#334e5e', marginBottom: 6, fontFamily: "'Outfit', sans-serif" }}>
                   Usuario o correo
                 </label>
                 <input
@@ -514,11 +566,12 @@ function Login() {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    border: '1px solid #d1dce3',
+                    background: theme === 'dark' ? '#1a1a23' : '#ffffff',
+                    border: theme === 'dark' ? '1px solid #424254' : '1px solid #d1dce3',
                     borderRadius: 10,
                     padding: '12px 14px',
                     fontSize: 14,
-                    color: '#102a38',
+                    color: theme === 'dark' ? '#e4e4e7' : '#102a38',
                     fontFamily: "'Outfit', sans-serif",
                     outline: 'none',
                   }}
@@ -533,9 +586,9 @@ function Login() {
                   style={{
                     flex: 1,
                     padding: '12px',
-                    background: '#eef3f6',
-                    color: '#334e5e',
-                    border: 'none',
+                    background: theme === 'dark' ? '#262632' : '#eef3f6',
+                    color: theme === 'dark' ? '#e4e4e7' : '#334e5e',
+                    border: theme === 'dark' ? '1px solid #3e3e4f' : 'none',
                     borderRadius: 10,
                     fontSize: 14,
                     fontWeight: 500,
@@ -588,12 +641,13 @@ function Login() {
         >
           <div
             style={{
-              background: '#ffffff',
+              background: theme === 'dark' ? '#18181f' : '#ffffff',
+              border: theme === 'dark' ? '1px solid #2b2b38' : 'none',
               borderRadius: 20,
               padding: '2rem',
               width: '100%',
               maxWidth: 440,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              boxShadow: theme === 'dark' ? '0 20px 60px rgba(0,0,0,0.8)' : '0 20px 60px rgba(0,0,0,0.4)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -601,37 +655,37 @@ function Login() {
               width: 64,
               height: 64,
               borderRadius: '50%',
-              background: 'rgba(239,68,68,0.1)',
+              background: 'rgba(239,68,68,0.12)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 1.25rem',
             }}>
-              <svg width="32" height="32" fill="none" stroke="#dc2626" viewBox="0 0 24 24" strokeWidth={2}>
+              <svg width="32" height="32" fill="none" stroke="#f87171" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
               </svg>
             </div>
             <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: '#102a38', fontFamily: "'Outfit', sans-serif" }}>
+              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: theme === 'dark' ? '#e4e4e7' : '#102a38', fontFamily: "'Outfit', sans-serif" }}>
                 Acceso denegado
               </h2>
-              <p style={{ margin: 0, fontSize: 14, color: '#5a7180', fontFamily: "'Outfit', sans-serif", lineHeight: 1.5 }}>
-                Tu cuenta se encuentra <strong style={{ color: '#dc2626' }}>inactiva</strong>. Contacta a tu administrador para reactivarla.
+              <p style={{ margin: 0, fontSize: 14, color: theme === 'dark' ? '#a1a1aa' : '#5a7180', fontFamily: "'Outfit', sans-serif", lineHeight: 1.5 }}>
+                Tu cuenta se encuentra <strong style={{ color: '#f87171' }}>inactiva</strong>. Contacta a tu administrador para reactivarla.
               </p>
             </div>
             {inactiveUser && (
               <div style={{
                 marginBottom: '1.25rem',
                 border: '1px solid rgba(239,68,68,0.3)',
-                background: 'rgba(239,68,68,0.06)',
+                background: theme === 'dark' ? '#1a1a23' : 'rgba(239,68,68,0.06)',
                 borderRadius: 10,
                 padding: '10px 14px',
                 textAlign: 'center',
               }}>
-                <span style={{ fontSize: 12, color: '#6b7280', fontFamily: "'Outfit', sans-serif", display: 'block' }}>
+                <span style={{ fontSize: 12, color: theme === 'dark' ? '#8e8e98' : '#6b7280', fontFamily: "'Outfit', sans-serif", display: 'block' }}>
                   Usuario
                 </span>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#102a38', fontFamily: "'Outfit', sans-serif" }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: theme === 'dark' ? '#e4e4e7' : '#102a38', fontFamily: "'Outfit', sans-serif" }}>
                   {inactiveUser}
                 </span>
               </div>
@@ -642,9 +696,9 @@ function Login() {
               style={{
                 width: '100%',
                 padding: '13px',
-                background: '#eef3f6',
-                color: '#334e5e',
-                border: 'none',
+                background: theme === 'dark' ? '#262632' : '#eef3f6',
+                color: theme === 'dark' ? '#e4e4e7' : '#334e5e',
+                border: theme === 'dark' ? '1px solid #3e3e4f' : 'none',
                 borderRadius: 10,
                 fontSize: 14,
                 fontWeight: 600,
@@ -656,6 +710,24 @@ function Login() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Pantalla de carga criogénica automática antes de ingresar al login */}
+      {isPreLoginLoading && (
+        <IceLoadingScreen
+          duration={2000}
+          initialMessage="Iniciando sistema criogénico AMATI..."
+          onComplete={() => setIsPreLoginLoading(false)}
+        />
+      )}
+
+      {/* Transición rápida y simple del Login al Dashboard */}
+      {isEnteringSystem && (
+        <IceTransitionScreen
+          userName={username.trim()}
+          duration={1100}
+          onComplete={() => navigate('/dashboard', { replace: true })}
+        />
       )}
     </div>
   )

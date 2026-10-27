@@ -1,0 +1,184 @@
+/* ==========================================================================
+   AMATI HIELO - PANTALLA DE TRANSICIÓN RÁPIDA (LOGIN -> DASHBOARD)
+   Diseño Minimalista, Rápido y Limpio con los Mismos Colores del Login
+   ========================================================================== */
+
+.ice-transition-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0a2a3a 0%, #0d3d55 40%, #0a5570 70%, #0e7090 100%);
+  font-family: 'Outfit', sans-serif;
+  color: #ffffff;
+  user-select: none;
+  opacity: 1;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ice-transition-overlay.is-exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Partículas sutiles de fondo */
+.ice-transition-snow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ice-transition-flake {
+  position: absolute;
+  color: rgb(170, 240, 255);
+  text-shadow: 0 0 12px rgba(120, 220, 255, 0.35);
+  user-select: none;
+  animation: transitionSnowFloat linear infinite;
+}
+
+@keyframes transitionSnowFloat {
+  0% { transform: translateY(-5vh) rotate(0deg); opacity: 0; }
+  20% { opacity: var(--flake-op, 0.4); }
+  80% { opacity: var(--flake-op, 0.4); }
+  100% { transform: translateY(105vh) rotate(360deg); opacity: 0; }
+}
+
+/* Tarjeta Minimalista de Cristal */
+.ice-transition-card {
+  position: relative;
+  z-index: 10;
+  width: 90%;
+  max-width: 360px;
+  padding: 2.25rem 2rem;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 22px;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.25), 0 0 35px rgba(56, 209, 240, 0.14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: transitionCardPop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes transitionCardPop {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Podio Compacto del Cubo de Hielo */
+.ice-transition-podium {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.ice-transition-ring {
+  position: absolute;
+  bottom: 0;
+  width: 76px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(56, 209, 240, 0.45);
+  background: radial-gradient(ellipse at center, rgba(56, 209, 240, 0.3) 0%, transparent 70%);
+  box-shadow: 0 0 16px rgba(56, 209, 240, 0.4);
+  transform: perspective(250px) rotateX(65deg);
+  animation: ringSpin 7s linear infinite;
+}
+
+@keyframes ringSpin {
+  from { transform: perspective(250px) rotateX(65deg) rotate(0deg); }
+  to { transform: perspective(250px) rotateX(65deg) rotate(360deg); }
+}
+
+.ice-transition-mascot {
+  position: relative;
+  z-index: 2;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 14px rgba(10, 42, 58, 0.5)) drop-shadow(0 0 16px rgba(56, 209, 240, 0.45));
+  animation: mascotGentleBob 3s ease-in-out infinite;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+@keyframes mascotGentleBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Marca y Saludo */
+.ice-transition-brand {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #38d1f0;
+  margin-bottom: 4px;
+}
+
+.ice-transition-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 1.25rem 0;
+  letter-spacing: -0.2px;
+}
+
+/* Barra de Carga Minimalista */
+.ice-transition-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-bottom: 0.85rem;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.ice-transition-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0a8fad 0%, #1ab8d8 50%, #38d1f0 100%);
+  box-shadow: 0 0 10px rgba(56, 209, 240, 0.6);
+  transition: width 0.12s linear;
+}
+
+/* Subtexto Informativo */
+.ice-transition-subtext {
+  font-size: 0.8rem;
+  color: rgba(160, 230, 255, 0.8);
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 480px) {
+  .ice-transition-card {
+    padding: 1.75rem 1.5rem;
+    max-width: 320px;
+  }
+  .ice-transition-podium {
+    width: 76px;
+    height: 76px;
+  }
+  .ice-transition-mascot {
+    width: 62px;
+    height: 62px;
+  }
+  .ice-transition-title {
+    font-size: 1.15rem;
+  }
+}

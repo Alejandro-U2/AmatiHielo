@@ -138,3 +138,54 @@ export async function deleteEstructura(id: number) {
     method: 'DELETE',
   })
 }
+
+export async function listRegistrosTabla(
+  tablaId: number,
+  params?: { page?: number; pageSize?: number; search?: string },
+) {
+  const query = new URLSearchParams()
+  if (params?.page) query.set('page', String(params.page))
+  if (params?.pageSize) query.set('pageSize', String(params.pageSize))
+  if (params?.search) query.set('search', params.search)
+
+  const payload = await request(`/api/estructura-datos/${tablaId}/registros?${query.toString()}`)
+  return {
+    data: (payload?.data || []) as Record<string, any>[],
+    total: Number(payload?.total || 0),
+    page: Number(payload?.page || 1),
+    pageSize: Number(payload?.pageSize || 20),
+    campos: (payload?.campos || []) as EstructuraCampo[],
+  }
+}
+
+export async function createRegistroTabla(
+  tablaId: number,
+  record: Record<string, unknown>,
+) {
+  const payload = await request(`/api/estructura-datos/${tablaId}/registros`, {
+    method: 'POST',
+    body: record,
+  })
+  return payload?.data
+}
+
+export async function updateRegistroTabla(
+  tablaId: number,
+  registroId: number | string,
+  record: Record<string, unknown>,
+) {
+  const payload = await request(`/api/estructura-datos/${tablaId}/registros/${registroId}`, {
+    method: 'PUT',
+    body: record,
+  })
+  return payload?.data
+}
+
+export async function deleteRegistroTabla(
+  tablaId: number,
+  registroId: number | string,
+) {
+  return await request(`/api/estructura-datos/${tablaId}/registros/${registroId}`, {
+    method: 'DELETE',
+  })
+}

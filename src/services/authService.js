@@ -120,12 +120,19 @@ export async function forgotPassword({ usernameOrEmail }) {
     throw new Error('Falta configurar VITE_API_URL para recuperar contraseña.')
   }
 
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+  const redirectTo = currentOrigin ? `${currentOrigin}/recuperar` : undefined
+
   const response = await fetch(`${API_URL}/auth/forgot-password`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ usernameOrEmail: trimmed }),
+    body: JSON.stringify({
+      usernameOrEmail: trimmed,
+      redirectTo,
+      origin: currentOrigin,
+    }),
   })
 
   let payload = null

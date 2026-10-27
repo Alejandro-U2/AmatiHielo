@@ -1,0 +1,493 @@
+/* ==========================================================================
+   AMATI HIELO - PANTALLA DE CARGA CRIOGÉNICA (ICE LOADING SCREEN)
+   Colores, Estética y Vidrio Alineados 100% con la Pantalla de Login
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  /* Paleta idéntica a Login.jsx */
+  --login-grad-start: #0a2a3a;
+  --login-grad-mid1: #0d3d55;
+  --login-grad-mid2: #0a5570;
+  --login-grad-end: #0e7090;
+
+  --login-card-bg: rgba(255, 255, 255, 0.05);
+  --login-card-border: rgba(255, 255, 255, 0.13);
+  --login-input-bg: rgba(255, 255, 255, 0.06);
+  --login-input-border: rgba(255, 255, 255, 0.1);
+
+  --login-cyan-bright: #38d1f0;
+  --login-cyan-light: rgb(170, 240, 255);
+  --login-cyan-text: rgba(160, 230, 255, 0.75);
+  --login-cyan-muted: rgba(160, 230, 255, 0.6);
+
+  --login-btn-start: #1ab8d8;
+  --login-btn-end: #0a8fad;
+  --login-btn-shadow: rgba(26, 184, 216, 0.4);
+}
+
+/* Contenedor Principal a Pantalla Completa - Mismo gradiente que login-page-container */
+.ice-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--login-grad-start) 0%, var(--login-grad-mid1) 40%, var(--login-grad-mid2) 70%, var(--login-grad-end) 100%);
+  font-family: 'Outfit', sans-serif;
+  color: #ffffff;
+  user-select: none;
+  opacity: 1;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ice-loader-overlay.is-exiting {
+  opacity: 0;
+  transform: scale(1.035);
+  pointer-events: none;
+}
+
+/* Efecto de Aurora Suave / Oleada Ártica en tonos del Login */
+.ice-loader-aurora {
+  position: absolute;
+  inset: -15%;
+  pointer-events: none;
+  background: 
+    radial-gradient(circle at 30% 25%, rgba(56, 209, 240, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 75% 35%, rgba(14, 112, 144, 0.22) 0%, transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(26, 184, 216, 0.12) 0%, transparent 60%);
+  filter: blur(45px);
+  animation: auroraBorealis 12s ease-in-out infinite alternate;
+}
+
+@keyframes auroraBorealis {
+  0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 0.85; }
+  50% { transform: translateY(-3%) scale(1.04) rotate(1.5deg); opacity: 1; }
+  100% { transform: translateY(3%) scale(0.98) rotate(-1.5deg); opacity: 0.9; }
+}
+
+/* Cuadrícula Translúcida de Fondo */
+.ice-loader-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 80%);
+  pointer-events: none;
+}
+
+/* Viñeta de Hielo Suave */
+.ice-loader-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 100px rgba(10, 42, 58, 0.6), inset 0 0 30px rgba(56, 209, 240, 0.06);
+}
+
+/* Contenedor de Partículas de Nieve */
+.ice-particles-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ice-particle {
+  position: absolute;
+  color: var(--login-cyan-light);
+  text-shadow: 0 0 16px rgba(120, 220, 255, 0.35);
+  user-select: none;
+  animation-name: fallAndDrift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fallAndDrift {
+  0% {
+    transform: translateY(-10vh) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: var(--particle-opacity, 0.7);
+  }
+  85% {
+    opacity: var(--particle-opacity, 0.7);
+  }
+  100% {
+    transform: translateY(110vh) translateX(var(--drift-x, 25px)) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Tarjeta Central - Idéntica a login-card-container */
+.ice-chamber-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem 2.25rem 2rem;
+  background: var(--login-card-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 24px;
+  border: 1px solid var(--login-card-border);
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.25),
+    0 0 40px rgba(56, 209, 240, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: cardFloatGently 6s ease-in-out infinite alternate;
+}
+
+@keyframes cardFloatGently {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-6px); }
+}
+
+/* Insignia Superior de Temperatura */
+.ice-temp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ice-temp-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--login-cyan-bright);
+  box-shadow: 0 0 10px var(--login-cyan-bright), 0 0 20px var(--login-btn-start);
+  animation: tempPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes tempPulse {
+  0%, 100% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.35); opacity: 0.45; }
+}
+
+.ice-temp-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--login-cyan-light);
+  text-transform: uppercase;
+}
+
+/* Escaparate Criogénico del Cubo de Hielo Mascota */
+.ice-mascot-podium {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+
+/* Anillo Base Criogénico */
+.ice-holo-ring {
+  position: absolute;
+  bottom: 0;
+  width: 110px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(56, 209, 240, 0.45);
+  background: radial-gradient(ellipse at center, rgba(56, 209, 240, 0.28) 0%, rgba(10, 168, 204, 0.08) 60%, transparent 80%);
+  box-shadow: 0 0 20px rgba(56, 209, 240, 0.4), inset 0 0 10px rgba(56, 209, 240, 0.25);
+  transform: perspective(300px) rotateX(65deg);
+  animation: ringSpin 9s linear infinite;
+}
+
+@keyframes ringSpin {
+  from { transform: perspective(300px) rotateX(65deg) rotate(0deg); }
+  to { transform: perspective(300px) rotateX(65deg) rotate(360deg); }
+}
+
+/* Resplandor del Hielo Mascota */
+.ice-mascot-glow {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 209, 240, 0.35) 0%, rgba(10, 85, 112, 0.15) 60%, transparent 80%);
+  filter: blur(14px);
+  animation: glowBreathe 3.5s ease-in-out infinite alternate;
+}
+
+@keyframes glowBreathe {
+  0% { transform: scale(0.9); opacity: 0.5; }
+  100% { transform: scale(1.2); opacity: 0.9; }
+}
+
+.ice-mascot-img {
+  position: relative;
+  z-index: 2;
+  width: 105px;
+  height: 105px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 16px rgba(10, 42, 58, 0.5)) drop-shadow(0 0 20px rgba(56, 209, 240, 0.45));
+  animation: mascotLevitate 4s ease-in-out infinite;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+@keyframes mascotLevitate {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1.5deg); }
+}
+
+/* Cristales flotantes alrededor de la mascota */
+.ice-crystal-sparkle {
+  position: absolute;
+  color: var(--login-cyan-bright);
+  font-size: 14px;
+  text-shadow: 0 0 12px rgba(56, 209, 240, 0.8);
+  animation: crystalSparkle 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes crystalSparkle {
+  0% { transform: scale(0.6) rotate(0deg); opacity: 0.35; }
+  100% { transform: scale(1.25) rotate(45deg); opacity: 1; }
+}
+
+/* Título de Marca: AMATI HIELO (Tipografía y colores idénticos a Login) */
+.ice-brand-heading {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #ffffff;
+  margin: 0 0 1.5rem 0;
+  text-shadow: 0 0 24px rgba(56, 209, 240, 0.4);
+}
+
+.ice-brand-subtitle {
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--login-cyan-text);
+  margin-top: -0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Barra de Progreso Criogénica */
+.ice-progress-wrapper {
+  width: 100%;
+  margin-bottom: 1.25rem;
+}
+
+.ice-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+}
+
+.ice-progress-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--login-cyan-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ice-progress-percentage {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--login-cyan-bright);
+  text-shadow: 0 0 12px rgba(56, 209, 240, 0.6);
+}
+
+.ice-progress-track {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Relleno idéntico al botón de Login: linear-gradient(135deg, #1ab8d8 0%, #0a8fad 100%) */
+.ice-progress-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #0a8fad 0%, #1ab8d8 60%, #38d1f0 100%);
+  box-shadow: 0 0 16px rgba(26, 184, 216, 0.5);
+  transition: width 0.18s cubic-bezier(0.1, 0.7, 0.1, 1);
+  overflow: hidden;
+}
+
+/* Destello de Escarcha en la Barra */
+.ice-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 40px 100%;
+  animation: iceShimmer 1.4s linear infinite;
+}
+
+@keyframes iceShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* Mensajes Dinámicos del Proceso - Mismo estilo que los inputs de Login */
+.ice-status-box {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--login-input-bg);
+  border: 1px solid var(--login-input-border);
+  margin-bottom: 1rem;
+}
+
+.ice-status-message {
+  font-size: 0.84rem;
+  color: #ffffff;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
+  animation: textFadeIn 0.35s ease-out;
+}
+
+@keyframes textFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Micro-Indicadores de Telemetría */
+.ice-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ice-telemetry-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ice-telemetry-key {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--login-cyan-text);
+  margin-bottom: 2px;
+}
+
+.ice-telemetry-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ice-telemetry-val.active {
+  color: var(--login-cyan-bright);
+}
+
+/* Botón Opcional de Sonido - Idéntico al botón de tema de Login */
+.ice-sound-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 50;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.2s ease;
+}
+
+.ice-sound-toggle:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(56, 209, 240, 0.5);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Responsividad en Teléfonos Móviles */
+@media (max-width: 480px) {
+  .ice-chamber-card {
+    padding: 1.5rem 1.25rem !important;
+    border-radius: 20px !important;
+  }
+  .ice-brand-heading {
+    font-size: 1.45rem;
+    letter-spacing: 3.5px;
+    margin-bottom: 1.25rem;
+  }
+  .ice-brand-subtitle {
+    font-size: 0.65rem;
+    letter-spacing: 2.5px;
+    margin-bottom: 1.25rem;
+  }
+  .ice-mascot-podium {
+    width: 105px;
+    height: 105px;
+  }
+  .ice-mascot-img {
+    width: 84px;
+    height: 84px;
+  }
+  .ice-holo-ring {
+    width: 90px;
+    height: 24px;
+  }
+}

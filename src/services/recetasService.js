@@ -1,6 +1,7 @@
 import { getAccessToken } from './authService'
 import { buildQueryString } from '../utils/queryString'
 import { API_URL as configuredApiUrl } from './apiUrl'
+import { notifyDataChange } from './realtimeSync'
 
 const API_URL = configuredApiUrl.replace(/\/$/, '')
 
@@ -85,12 +86,18 @@ function normalizeReceta(row) {
   const utilidad = precioVenta - costoTotal
   const margen = precioVenta > 0 ? (utilidad / precioVenta) * 100 : 0
 
+  const cachedImg = typeof localStorage !== 'undefined' && row.codigo
+    ? localStorage.getItem(`amati_receta_img_${row.codigo}`)
+    : null
+  const imagenUrl = row.imagen_url || row.imagenUrl || cachedImg || null
+
   return {
     id: row.id,
     codigo: row.codigo,
     nombre: row.nombre,
     categoria: row.categoria || 'Bebidas',
     presentacion: row.presentacion,
+    imagenUrl,
     costoElectricidad,
     costoManoObra,
     costoAgua,
@@ -165,9 +172,15 @@ function normalizeProduccion(row) {
   }
 }
 
-export async function getRecetas() {
-  const payload = await request('/api/recetas')
+export async function getRecetas(options = {}) {
+  const query = options?.includeImages ? '?includeImages=true' : ''
+  const payload = await request(`/api/recetas${query}`)
   return (payload?.data || []).map(normalizeReceta)
+}
+
+export async function getRecetasCount() {
+  const payload = await request('/api/recetas/count')
+  return payload?.count ?? 0
 }
 
 export async function listCategoriasReceta() {
@@ -207,7 +220,14 @@ export async function createReceta(input) {
     method: 'POST',
     body: input,
   })
-  return normalizeReceta(payload?.data || {})
+  const receta = normalizeReceta(payload?.data || {})
+  if (typeof localStorage !== 'undefined' && receta.codigo) {
+    if (receta.imagenUrl && receta.imagenUrl.startsWith('http')) {
+      localStorage.setItem(`amati_receta_img_${receta.codigo}`, receta.imagenUrl)
+    }
+  }
+  notifyDataChange('recetas')
+  return receta
 }
 
 export async function updateReceta(id, input) {
@@ -215,13 +235,25 @@ export async function updateReceta(id, input) {
     method: 'PUT',
     body: input,
   })
-  return normalizeReceta(payload?.data || {})
+  const receta = normalizeReceta(payload?.data || {})
+  if (typeof localStorage !== 'undefined' && (receta.codigo || input.codigo)) {
+    const code = receta.codigo || input.codigo
+    if (receta.imagenUrl && receta.imagenUrl.startsWith('http')) {
+      localStorage.setItem(`amati_receta_img_${code}`, receta.imagenUrl)
+    } else if (input.imagenUrl === '' || input.imagenUrl === null) {
+      localStorage.removeItem(`amati_receta_img_${code}`)
+      receta.imagenUrl = null
+    }
+  }
+  notifyDataChange('recetas')
+  return receta
 }
 
 export async function deleteReceta(id) {
   await request(`/api/recetas/${id}`, {
     method: 'DELETE',
   })
+  notifyDataChange('recetas')
 }
 
 export async function addIngrediente(recetaId, input) {
@@ -293,7 +325,9 @@ export async function createProduccion(input) {
     method: 'POST',
     body: input,
   })
-  return normalizeProduccion(payload?.data || {})
+  const produccion = normalizeProduccion(payload?.data || {})
+  notifyDataChange('produccion')
+  return produccion
 }
 
 export async function getProduccionesRango(fechaInicio, fechaFin) {

@@ -5,6 +5,18 @@ function resolveApiUrl() {
     return configuredApiUrl || 'http://localhost:3001'
   }
 
+  const hostname = window.location.hostname
+  const isTunnel = hostname.endsWith('.devtunnels.ms') ||
+    hostname.endsWith('.app.github.dev') ||
+    hostname.endsWith('.githubpreview.dev') ||
+    hostname.endsWith('.ngrok-free.app') ||
+    hostname.endsWith('.loca.lt')
+
+  // En túneles externos (como VS Code devtunnels) o acceso remoto, usar el origin actual mediante el proxy de Vite
+  if (isTunnel) {
+    return window.location.origin
+  }
+
   if (!configuredApiUrl) {
     return `${window.location.protocol}//${window.location.hostname}:3001`
   }
@@ -15,8 +27,7 @@ function resolveApiUrl() {
     const configuredIsLocal = ['localhost', '127.0.0.1'].includes(configuredUrl.hostname)
 
     if (browserIsRemote && configuredIsLocal) {
-      configuredUrl.hostname = window.location.hostname
-      return configuredUrl.toString().replace(/\/$/, '')
+      return window.location.origin
     }
   } catch {
     return configuredApiUrl

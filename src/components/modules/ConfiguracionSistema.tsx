@@ -42,6 +42,7 @@ import ReporteModal from '../../components/ReporteModal'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import Pagination from '../../components/Pagination'
 import SortableHeader from '../../components/SortableHeader'
+import SuccessModal from '../SuccessModal'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
 
 type TabId = 'empresa' | 'sucursales' | 'impuestos' | 'notificaciones' | 'umbrales'
@@ -139,16 +140,32 @@ function readLogoFile(file: File) {
   })
 }
 
-function StatCard({ title, value, icon, accentClassName }: { title: string; value: ReactNode; icon: ReactNode; accentClassName: string }) {
+function StatCard({
+  title,
+  value,
+  icon,
+  tone = 'blue',
+  detail,
+}: {
+  title: string
+  value: ReactNode
+  icon: ReactNode
+  tone?: 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'red'
+  detail?: string
+}) {
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-md ring-1 ring-slate-100">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
-        </div>
-        <div className={`rounded-2xl p-3 ${accentClassName}`}>{icon}</div>
+    <div className={`dashboard-kpi dashboard-tone-${tone}`}>
+      <div className="dashboard-kpi-icon">{icon}</div>
+      <div className="min-w-0">
+        <p className="dashboard-kpi-label">{title}</p>
+        <div className="dashboard-kpi-value">{value}</div>
+        {detail && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="dashboard-kpi-change">{detail}</span>
+          </div>
+        )}
       </div>
+      <div className="dashboard-sparkline" aria-hidden="true" />
     </div>
   )
 }
@@ -184,6 +201,7 @@ export default function ConfiguracionSistema() {
   const [companyError, setCompanyError] = useState('')
   const [taxError, setTaxError] = useState('')
   const [thresholdError, setThresholdError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   const loadConfig = async () => {
     try {
@@ -372,7 +390,7 @@ export default function ConfiguracionSistema() {
       setSavingSection('empresa')
       const updated = await updateEmpresaConfig(companyForm)
       setCompanyForm(updated)
-      toast.success('Datos de la empresa actualizados.')
+      setSuccessMessage('Datos de la empresa actualizados correctamente.')
       await loadConfig()
     } catch (error: any) {
       setCompanyError(error.message || 'No fue posible guardar la empresa.')
@@ -415,7 +433,7 @@ export default function ConfiguracionSistema() {
       setSavingSection('impuestos')
       const updated = await updateImpuestosConfig(taxForm)
       setTaxForm(updated)
-      toast.success('Configuración de impuestos guardada.')
+      setSuccessMessage('Configuración de impuestos guardada correctamente.')
       await loadConfig()
     } catch (error: any) {
       setTaxError(error.message || 'No fue posible guardar los impuestos.')
@@ -429,7 +447,7 @@ export default function ConfiguracionSistema() {
       setSavingSection('notificaciones')
       const updated = await updateNotificacionesConfig(notificationForm)
       setNotificationForm(updated)
-      toast.success('Configuración de notificaciones guardada.')
+      setSuccessMessage('Configuración de notificaciones guardada correctamente.')
       await loadConfig()
     } catch (error: any) {
       toast.error(error.message || 'No fue posible guardar las notificaciones.')
@@ -478,7 +496,7 @@ export default function ConfiguracionSistema() {
       setSavingSection('umbrales')
       const updated = await updateUmbralesConfig(thresholdForm)
       setThresholdForm(updated)
-      toast.success('Umbrales guardados correctamente.')
+      setSuccessMessage('Umbrales guardados correctamente.')
       await loadConfig()
     } catch (error: any) {
       setThresholdError(error.message || 'No fue posible guardar los umbrales.')
@@ -499,10 +517,10 @@ export default function ConfiguracionSistema() {
 
       if (editingBranchId) {
         await updateSucursal(editingBranchId, branchForm)
-        toast.success('Sucursal actualizada correctamente.')
+        setSuccessMessage('Sucursal actualizada correctamente.')
       } else {
         await createSucursal(branchForm)
-        toast.success('Sucursal creada correctamente.')
+        setSuccessMessage('Sucursal creada correctamente.')
       }
 
       closeBranchModal()
@@ -519,7 +537,7 @@ export default function ConfiguracionSistema() {
     try {
       setSavingSection(`branch-${branch.id}`)
       await updateSucursal(branch.id, { activa: !branch.activa })
-      toast.success(branch.activa ? 'Sucursal desactivada.' : 'Sucursal activada.')
+      setSuccessMessage(branch.activa ? 'Sucursal desactivada correctamente.' : 'Sucursal activada correctamente.')
       await loadConfig()
     } catch (error: any) {
       toast.error(error.message || 'No fue posible actualizar el estado de la sucursal.')
@@ -535,7 +553,7 @@ export default function ConfiguracionSistema() {
     try {
       setSavingSection(`branch-${branch.id}`)
       await deleteSucursal(branch.id)
-      toast.success('Sucursal eliminada correctamente.')
+      setSuccessMessage('Sucursal eliminada correctamente.')
       await loadConfig()
     } catch (error: any) {
       toast.error(error.message || 'No fue posible eliminar la sucursal.')
@@ -604,21 +622,21 @@ export default function ConfiguracionSistema() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total de sucursales" value={loading ? '...' : branchCount} icon={<Building2 size={24} />} accentClassName="bg-cyan-50 text-cyan-700" />
-        <StatCard title="Sucursales activas" value={loading ? '...' : activeBranchCount} icon={<Power size={24} />} accentClassName="bg-emerald-50 text-emerald-700" />
-        <StatCard title="IVA actual" value={loading ? '...' : ivaValue} icon={<FileText size={24} />} accentClassName="bg-indigo-50 text-indigo-700" />
-        <StatCard title="Alertas habilitadas" value={loading ? '...' : totalNotificationFlags} icon={<BellRing size={24} />} accentClassName="bg-amber-50 text-amber-700" />
+      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 mb-6">
+        <StatCard title="Total de sucursales" value={loading ? '...' : branchCount} icon={<Building2 size={25} strokeWidth={2.2} />} tone="cyan" detail="Puntos AMATI" />
+        <StatCard title="Sucursales activas" value={loading ? '...' : activeBranchCount} icon={<Power size={25} strokeWidth={2.2} />} tone="green" detail="Operando hoy" />
+        <StatCard title="IVA actual" value={loading ? '...' : ivaValue} icon={<FileText size={25} strokeWidth={2.2} />} tone="purple" detail="Impuesto general" />
+        <StatCard title="Alertas habilitadas" value={loading ? '...' : totalNotificationFlags} icon={<BellRing size={25} strokeWidth={2.2} />} tone="orange" detail="Notificaciones del sistema" />
       </div>
 
-      <div className="rounded-2xl bg-white p-4 shadow-md ring-1 ring-slate-100">
-        <div className="flex flex-wrap gap-2">
+      <div className="rounded-2xl bg-white p-3 sm:p-4 shadow-md ring-1 ring-slate-100 overflow-hidden">
+        <div className="flex overflow-x-auto scrollbar-none touch-scroll gap-2 pb-0.5 whitespace-nowrap">
           {TAB_ORDER.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+              className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition ${
                 activeTab === tab.id
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -631,7 +649,7 @@ export default function ConfiguracionSistema() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+      <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-md ring-1 ring-slate-100">
         {loading ? (
           <div className="py-16 text-center text-sm text-slate-500">Cargando configuración...</div>
         ) : null}
@@ -995,6 +1013,12 @@ export default function ConfiguracionSistema() {
         generating={generandoReporte}
         onGenerate={handleGenerarReporteSucursales}
         onClose={() => setReporteOpen(false)}
+      />
+
+      <SuccessModal
+        isOpen={Boolean(successMessage)}
+        message={successMessage}
+        onClose={() => setSuccessMessage('')}
       />
     </div>
   )

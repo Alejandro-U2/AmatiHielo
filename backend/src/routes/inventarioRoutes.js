@@ -16,6 +16,17 @@ import {
 	updateProveedor,
 	updateProducto,
 } from '../controllers/inventarioController.js'
+import {
+	listAuditorias,
+	getAuditoriaById,
+	createAuditoria,
+	updateAuditoriaEstado,
+	saveConteo,
+	investigarDiferencia,
+	aprobarAjustes,
+	cerrarAuditoria,
+	getCatalogosAuditoria,
+} from '../controllers/auditoriaController.js'
 import { requireAdmin } from '../middleware/requireAdmin.js'
 import { requireSession } from '../middleware/requireSession.js'
 
@@ -39,4 +50,17 @@ router.post('/producto', requireAdmin, createProducto)
 router.put('/producto/:id', requireAdmin, updateProducto)
 router.delete('/producto/:id', requireAdmin, deleteProducto)
 
+// Rutas de Auditoría de Inventario
+router.get('/auditoria/catalogos', getCatalogosAuditoria)
+router.get('/auditoria', listAuditorias)
+router.post('/auditoria', createAuditoria)
+router.get('/auditoria/:id', getAuditoriaById)
+router.patch('/auditoria/:id/estado', updateAuditoriaEstado)
+router.put('/auditoria/:id/estado', updateAuditoriaEstado)
+router.put('/auditoria/:id/conteo', saveConteo)
+router.put('/auditoria/:id/investigar/:detalleId', investigarDiferencia)
+router.post('/auditoria/:id/aprobar-ajustes', requireAdmin, aprobarAjustes)
+router.post('/auditoria/:id/cerrar', cerrarAuditoria)
+
 export default router
+

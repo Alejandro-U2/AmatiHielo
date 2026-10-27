@@ -8,6 +8,7 @@ import {
   Factory,
   ShoppingCart,
   Filter,
+  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import logoAmati from '../../assets/logo-amati.jpg'
@@ -21,6 +22,7 @@ import { buildReportData } from '../../utils/reportesUtils'
 import { generateGenericReportPdf, generateReportExcel, generateSalesReportPdf, generateTableReportExcel } from '../../utils/reportesExport'
 import Pagination from '../../components/Pagination'
 import ModuleHeader from '../ModuleHeader'
+import SuccessModal from '../SuccessModal'
 
 const reports = [
   {
@@ -84,6 +86,12 @@ function Reportes() {
   const [movements, setMovements] = useState([])
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [exportingKey, setExportingKey] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [successModalData, setSuccessModalData] = useState({
+    title: 'Reporte generado',
+    subtitle: 'Operación completada',
+  })
   const currentUser = getCurrentUser()
 
   useEffect(() => {
@@ -137,6 +145,7 @@ function Reportes() {
 
   const handleExport = async (report, format) => {
     try {
+      setExportingKey(`${report.id}-${format}`)
       const fileBase = report.name.replace(/\s+/g, '_').toLowerCase()
       const commonMeta = {
         reportName: report.name,
@@ -192,7 +201,11 @@ function Reportes() {
           })
         }
 
-        toast.success(`Exportación completada: ${report.name}`)
+        setSuccessModalData({
+          title: 'Reporte generado',
+          subtitle: 'Operación completada',
+        })
+        setSuccessMessage(`El reporte "${report.name}" (${format}) ha sido generado y descargado exitosamente.`)
         return
       }
 
@@ -293,16 +306,22 @@ function Reportes() {
         })
       }
 
-      toast.success(`Exportación completada: ${report.name}`)
+      setSuccessModalData({
+        title: 'Reporte generado',
+        subtitle: 'Operación completada',
+      })
+      setSuccessMessage(`El reporte "${report.name}" (${format}) ha sido generado y descargado exitosamente.`)
     } catch (error) {
       toast.error(error.message || 'No fue posible generar el archivo')
+    } finally {
+      setExportingKey('')
     }
   }
 
   return (
-    <div className="dashboard-shell">
+    <div className="dashboard-shell space-y-6">
       <ModuleHeader title="Reportes" description="Consulta y genera reportes operativos de ventas, inventario, producción y demanda" eyebrow="Análisis e información" icon={FileText} />
-      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
         {[
           { label: 'Reportes disponibles', value: String(reports.length), change: '+3', detail: 'reportes activos', icon: FileText, tone: 'blue' },
           { label: 'Ventas del periodo', value: String(reportData.salesCount), change: '+12%', detail: 'transacciones', icon: Download, tone: 'green' },
@@ -331,10 +350,38 @@ function Reportes() {
         })}
       </div>
 
+      {reportData.lowStockProducts > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-amber-900">
+                Alerta de Existencias: {reportData.lowStockProducts} {reportData.lowStockProducts === 1 ? 'producto requiere' : 'productos requieren'} reposición
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Existen artículos que han alcanzado o descendido de su nivel mínimo configurado en bodega.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('Inventario')
+              setCurrentPage(1)
+            }}
+            className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+          >
+            Ver Reporte de Inventario
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-4 md:p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtros de Reporte</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Categoría</label>
               <select
@@ -373,9 +420,13 @@ function Reportes() {
                 type="button"
                 onClick={() => {
                   setCurrentPage(1)
-                  toast.success('Filtros aplicados')
+                  setSuccessModalData({
+                    title: 'Filtros aplicados',
+                    subtitle: 'Consulta actualizada',
+                  })
+                  setSuccessMessage('Los filtros se han aplicado correctamente al catálogo de reportes.')
                 }}
-                className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 font-medium"
               >
                 <Filter size={18} />
                 Aplicar Filtros
@@ -389,6 +440,9 @@ function Reportes() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedReports.map((report) => {
               const Icon = report.icon
+              const isPdfExporting = exportingKey === `${report.id}-PDF`
+              const isExcelExporting = exportingKey === `${report.id}-Excel`
+
               return (
                 <div
                   key={report.id}
@@ -409,17 +463,19 @@ function Reportes() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleExport(report, 'PDF')}
-                      className="flex-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                      disabled={isPdfExporting || Boolean(exportingKey)}
+                      className="flex-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Download size={16} />
-                      PDF
+                      {isPdfExporting ? 'Generando...' : 'PDF'}
                     </button>
                     <button
                       onClick={() => handleExport(report, 'Excel')}
-                      className="flex-1 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                      disabled={isExcelExporting || Boolean(exportingKey)}
+                      className="flex-1 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Download size={16} />
-                      Excel
+                      {isExcelExporting ? 'Generando...' : 'Excel'}
                     </button>
                   </div>
                 </div>
@@ -427,13 +483,13 @@ function Reportes() {
             })}
           </div>
           <Pagination
-              page={currentPage}
-              totalPages={totalPages}
-              onChange={setCurrentPage}
-              pageSize={pageSize}
-              onPageSizeChange={setPageSize}
-              totalItems={filteredReports.length}
-            />
+            page={currentPage}
+            totalPages={totalPages}
+            onChange={setCurrentPage}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            totalItems={filteredReports.length}
+          />
         </div>
       </div>
 
@@ -446,37 +502,45 @@ function Reportes() {
           {loading ? (
             <div className="py-8 text-center text-sm text-gray-500">Cargando datos reales del sistema...</div>
           ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fecha</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Transacciones</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Ventas</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ticket Promedio</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Método Principal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {reportData.previewRows.length > 0 ? reportData.previewRows.map((row) => (
-                  <tr key={row.fecha} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">{row.fecha}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{row.transacciones}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-green-600">{row.totalVentas}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{row.ticketPromedio}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{row.metodoPrincipal}</td>
-                  </tr>
-                )) : (
+            <div className="overflow-x-auto touch-scroll">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <td colSpan="5" className="px-6 py-8 text-center text-sm text-gray-500">No hay ventas registradas para este rango.</td>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fecha</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Transacciones</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Ventas</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ticket Promedio</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Método Principal</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {reportData.previewRows.length > 0 ? reportData.previewRows.map((row) => (
+                    <tr key={row.fecha} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900">{row.fecha}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{row.transacciones}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-green-600">{row.totalVentas}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{row.ticketPromedio}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{row.metodoPrincipal}</td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan="5" className="px-6 py-8 text-center text-sm text-gray-500">No hay ventas registradas para este rango.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
+
+      <SuccessModal
+        isOpen={Boolean(successMessage)}
+        title={successModalData.title}
+        subtitle={successModalData.subtitle}
+        message={successMessage}
+        onClose={() => setSuccessMessage('')}
+      />
     </div>
   )
 }

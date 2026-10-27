@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart3,
@@ -21,16 +21,36 @@ import {
   X,
 } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
-import GestionUsuarios from './modules/GestionUsuarios'
-import Inventarios from './modules/Inventarios'
-import MantenimientoEstructuraDatos from './modules/MantenimientoEstructuraDatos'
-import ConfiguracionSistema from './modules/ConfiguracionSistema'
-import ProduccionRecetas from './modules/ProduccionRecetas'
-import PuntoVenta from './modules/PuntoVenta'
-import IAPredictiva from './modules/IAPredictiva'
-import Reportes from './modules/Reportes'
 import { getCurrentUser, logout } from '../services/authService'
+import { listVentasPos } from '../services/posService'
+import { listProductosInventario } from '../services/inventarioService'
+import { getRecetasCount } from '../services/recetasService'
+import { subscribeToDataChanges } from '../services/realtimeSync'
 import { useTheme } from '../theme/useTheme'
+import IceTransitionScreen from './IceTransitionScreen'
+
+// Carga perezosa (Lazy loading) de módulos para máxima velocidad inicial
+const GestionUsuarios = lazy(() => import('./modules/GestionUsuarios'))
+const Inventarios = lazy(() => import('./modules/Inventarios'))
+const MantenimientoEstructuraDatos = lazy(() => import('./modules/MantenimientoEstructuraDatos'))
+const ConfiguracionSistema = lazy(() => import('./modules/ConfiguracionSistema'))
+const ProduccionRecetas = lazy(() => import('./modules/ProduccionRecetas'))
+const PuntoVenta = lazy(() => import('./modules/PuntoVenta'))
+const IAPredictiva = lazy(() => import('./modules/IAPredictiva'))
+const Reportes = lazy(() => import('./modules/Reportes'))
+
+function ModuleLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[380px] p-8 text-center animate-fade-in">
+      <div className="w-14 h-14 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 flex items-center justify-center text-cyan-600 mb-3 shadow-md shadow-cyan-500/10 relative">
+        <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+        <span className="absolute text-xs select-none">❄</span>
+      </div>
+      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Cargando módulo criogénico...</p>
+      <p className="text-xs text-slate-400 dark:text-slate-400 mt-1">Optimizando recursos de AMATI Hielo</p>
+    </div>
+  )
+}
 
 function ModuleAccessDenied({ moduleName }) {
   return (
@@ -59,8 +79,92 @@ function Dashboard() {
   )
   const [activeModule, setActiveModule] = useState('inicio')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(() => {
+    if (sessionStorage.getItem('amati_just_logged_in') === 'true') {
+      sessionStorage.removeItem('amati_just_logged_in')
+      return false
+    }
+    const alreadyShown = sessionStorage.getItem('amati_dashboard_entry_shown') === 'true'
+    return !alreadyShown
+  })
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSidebarOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  const [dashboardStats, setDashboardStats] = useState({
+    ventasHoy: 0,
+    transaccionesHoy: 0,
+    stockTotal: 0,
+    recetasTotal: 0,
+  })
+
+  useEffect(() => {
+    let isMounted = true
+
+    const fetchStats = async ({ updateRecetas = false } = {}) => {
+      try {
+        const promises = [
+          listVentasPos().catch(() => []),
+          listProductosInventario().catch(() => []),
+        ]
+        if (updateRecetas) {
+          promises.push(getRecetasCount().catch(() => 0))
+        }
+
+        const [ventas, inventario, recetasTotalCount] = await Promise.all(promises)
+
+        if (!isMounted) return
+
+        const hoy = new Date()
+        const ventasHoy = (ventas || []).filter((v) => {
+          if (!v.createdAt) return false
+          const f = new Date(v.createdAt)
+          return (
+            !Number.isNaN(f.getTime()) &&
+            f.getFullYear() === hoy.getFullYear() &&
+            f.getMonth() === hoy.getMonth() &&
+            f.getDate() === hoy.getDate()
+          )
+        })
+
+        const totalVentasHoy = ventasHoy.reduce((s, v) => s + (Number(v.total) || 0), 0)
+        const stockTotal = (inventario || []).reduce((s, p) => s + (Number(p.stock) || 0), 0)
+
+        setDashboardStats((prev) => ({
+          ventasHoy: totalVentasHoy,
+          transaccionesHoy: ventasHoy.length,
+          stockTotal,
+          recetasTotal: updateRecetas ? (recetasTotalCount ?? prev.recetasTotal) : prev.recetasTotal,
+        }))
+      } catch (err) {
+        console.debug('Error al cargar métricas de dashboard:', err)
+      }
+    }
+
+    void fetchStats({ updateRecetas: true })
+
+    const unsubscribe = subscribeToDataChanges(({ type }) => {
+      const shouldUpdateRecetas = type === 'recetas' || type === 'all'
+      void fetchStats({ updateRecetas: shouldUpdateRecetas })
+    }, { intervalSeconds: 15, types: ['all', 'ventas', 'recetas', 'inventario', 'produccion'] })
+
+    return () => {
+      isMounted = false
+      unsubscribe()
+    }
+  }, [])
 
   const handleLogout = () => {
+    sessionStorage.removeItem('amati_dashboard_entry_shown')
+    sessionStorage.removeItem('amati_just_logged_in')
     logout()
     navigate('/', { replace: true })
   }
@@ -151,115 +255,225 @@ function Dashboard() {
     })
   }
 
+  if (initialLoading) {
+    return (
+      <IceTransitionScreen
+        userName={user}
+        duration={1100}
+        onComplete={() => {
+          sessionStorage.setItem('amati_dashboard_entry_shown', 'true')
+          setInitialLoading(false)
+        }}
+      />
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex">
+    <div className="min-h-screen bg-slate-100 flex overflow-x-hidden relative">
+      {/* Overlay para móviles y tablets (< lg) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
 
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-white shadow-xl flex flex-col transform transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <img src={logoAmati} alt="AMATI HIELO" className="h-12 w-12 rounded-full ring-2 ring-cyan-500" />
-              <div>
-                <h1 className="text-lg font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+      {/* Menú lateral (Sidebar) */}
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 bg-white border-r border-slate-200 shadow-2xl lg:shadow-none flex flex-col transition-all duration-300 ease-in-out ${
+          sidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full lg:translate-x-0'
+        } ${desktopCollapsed ? 'lg:w-20' : 'lg:w-64'}`}
+      >
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <img
+              src={logoAmati}
+              alt="AMATI HIELO"
+              className="h-10 w-10 sm:h-11 sm:w-11 rounded-full ring-2 ring-cyan-500 shrink-0 object-cover"
+            />
+            {(!desktopCollapsed || sidebarOpen) && (
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent truncate">
                   AMATI HIELO
                 </h1>
-                <p className="text-xs text-gray-600">Sistema de Gestion</p>
+                <p className="text-[11px] sm:text-xs text-slate-500 truncate">Sistema de Gestión</p>
               </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-1 rounded-lg hover:bg-gray-100"
-            >
-              <X size={20} />
-            </button>
+            )}
           </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+            aria-label="Cerrar menú"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Modulos</p>
-          {modules.filter((module) => hasModuleAccess(module)).map((module) => {
-            const ModuleIcon = module.icon
+        <nav className="flex-1 p-3 overflow-y-auto space-y-1">
+          {(!desktopCollapsed || sidebarOpen) && (
+            <p className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Módulos
+            </p>
+          )}
+          {modules
+            .filter((module) => hasModuleAccess(module))
+            .map((module) => {
+              const ModuleIcon = module.icon
+              const isActive = activeModule === module.id
 
-            return (
-              <button
-                key={module.id}
-                type="button"
-                disabled={false}
-                onClick={() => {
-                  setActiveModule(module.id)
-                  setSidebarOpen(false)
-                }}
-                className={`w-full text-left px-4 py-3 rounded-lg mb-2 transition-all duration-200 flex items-center gap-3 ${
-                  activeModule === module.id
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <ModuleIcon size={22} strokeWidth={2} className="flex-shrink-0" />
-                <span className="font-medium text-sm flex-1">{module.name}</span>
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={module.id}
+                  type="button"
+                  title={module.name}
+                  onClick={() => {
+                    setActiveModule(module.id)
+                    setSidebarOpen(false)
+                  }}
+                  className={`w-full text-left px-3.5 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-3 ${
+                    desktopCollapsed && !sidebarOpen ? 'justify-center px-2' : ''
+                  } ${
+                    isActive
+                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md font-semibold'
+                      : 'text-slate-700 hover:bg-slate-100 font-medium'
+                  }`}
+                >
+                  <ModuleIcon size={20} strokeWidth={2} className="shrink-0" />
+                  {(!desktopCollapsed || sidebarOpen) && (
+                    <span className="text-sm truncate">{module.name}</span>
+                  )}
+                </button>
+              )
+            })}
         </nav>
 
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-3 border-t border-slate-200 space-y-2">
           <button
             type="button"
             onClick={toggleTheme}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 mb-3 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-sm font-medium"
+            title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors text-xs font-medium ${
+              desktopCollapsed && !sidebarOpen ? 'justify-center px-2' : ''
+            }`}
           >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+            {theme === 'dark' ? <Sun size={17} className="shrink-0" /> : <Moon size={17} className="shrink-0" />}
+            {(!desktopCollapsed || sidebarOpen) && (
+              <span>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
+            )}
           </button>
-          <div className="bg-gray-50 rounded-lg p-3 mb-3">
-            <p className="text-xs text-gray-600 mb-1">Sesion activa</p>
-            <p className="font-semibold text-gray-800 truncate">{user}</p>
-          </div>
+
+          {(!desktopCollapsed || sidebarOpen) && (
+            <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-2.5">
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Sesión</p>
+              <p className="text-xs font-semibold text-slate-800 truncate">{user}</p>
+            </div>
+          )}
+
           <button
+            type="button"
             onClick={handleLogout}
-            className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg text-sm font-medium"
+            title="Cerrar Sesión"
+            className={`w-full bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-xl transition-all shadow-xs text-xs font-medium flex items-center justify-center gap-2 ${
+              desktopCollapsed && !sidebarOpen ? 'px-2' : ''
+            }`}
           >
-            Cerrar Sesion
+            <LockKeyhole size={15} className="shrink-0" />
+            {(!desktopCollapsed || sidebarOpen) && <span>Cerrar Sesión</span>}
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto min-w-0">
-        <header className="border-b border-cyan-200 bg-gradient-to-r from-cyan-100 via-sky-50 to-blue-100 shadow-sm">
-          <div className="px-4 py-4 md:px-8 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100"
-            >
-              <Menu size={22} />
-            </button>
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold text-slate-900">
-                {activeModuleInfo?.name}
-              </h2>
-              <p className="text-sm text-gray-600">
-                {activeModuleInfo?.description}
-              </p>
+
+      {/* Contenido principal */}
+      <main className="flex-1 flex flex-col min-w-0 max-w-full overflow-y-auto">
+        <header className="border-b border-slate-200 bg-white/95 backdrop-blur-xs sticky top-0 z-30 shadow-xs">
+          <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                    setSidebarOpen((prev) => !prev)
+                  } else {
+                    setDesktopCollapsed((prev) => !prev)
+                  }
+                }}
+                className="p-2 -ml-1 rounded-xl text-slate-700 hover:bg-slate-100 active:bg-slate-200 transition-colors shrink-0"
+                aria-label="Alternar menú lateral"
+                title={desktopCollapsed ? "Expandir menú" : "Colapsar menú"}
+              >
+                <Menu size={22} />
+              </button>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg md:text-xl font-bold text-slate-900 truncate">
+                  {activeModuleInfo?.name}
+                </h2>
+                <p className="hidden sm:block text-xs text-slate-500 truncate">
+                  {activeModuleInfo?.description}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+                aria-label="Cambiar tema"
+                title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+              >
+                {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
+              </button>
+              <div className="hidden md:flex items-center gap-2 pl-3 border-l border-slate-200 text-xs text-slate-600">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="font-semibold text-slate-800 truncate max-w-[140px]">{user}</span>
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="p-4 md:p-8">
+        <div className="p-3 sm:p-4 md:p-6 lg:p-8">
           {activeModule === 'inicio' && (
             <>
-              <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5 mb-5 md:mb-6">
+              <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5 mb-5 md:mb-6">
                 {[
-                  { label: 'Ventas Hoy', value: 'Q8,450', change: '+12%', detail: 'vs. ayer', icon: Wallet, tone: 'green', chart: 'dashboard-chart-green' },
-                  { label: 'Stock Disponible', value: '1,240', change: '-5%', detail: 'vs. semana anterior', icon: Box, tone: 'blue', chart: 'dashboard-chart-blue', negative: true },
-                  { label: 'Producción', value: '850 kg', change: '+8%', detail: 'vs. ayer', icon: Factory, tone: 'purple', chart: 'dashboard-chart-purple' },
-                  { label: 'Temperatura', value: '28°C', change: 'En rango', detail: '', icon: Thermometer, tone: 'orange', chart: 'dashboard-chart-orange' },
+                  {
+                    label: 'Ventas Hoy',
+                    value: `Q${dashboardStats.ventasHoy.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    change: `${dashboardStats.transaccionesHoy} ventas`,
+                    detail: 'en el día',
+                    icon: Wallet,
+                    tone: 'green',
+                    chart: 'dashboard-chart-green',
+                  },
+                  {
+                    label: 'Stock Disponible',
+                    value: `${dashboardStats.stockTotal.toLocaleString('es-GT')}`,
+                    change: 'Total',
+                    detail: 'unidades en stock',
+                    icon: Box,
+                    tone: 'blue',
+                    chart: 'dashboard-chart-blue',
+                  },
+                  {
+                    label: 'Catálogo Recetas',
+                    value: `${dashboardStats.recetasTotal}`,
+                    change: 'Activas',
+                    detail: 'para venta POS',
+                    icon: Factory,
+                    tone: 'purple',
+                    chart: 'dashboard-chart-purple',
+                  },
+                  {
+                    label: 'Temperatura',
+                    value: '28°C',
+                    change: 'En rango',
+                    detail: 'cámaras frías',
+                    icon: Thermometer,
+                    tone: 'orange',
+                    chart: 'dashboard-chart-orange',
+                  },
                 ].map((metric) => {
                   const MetricIcon = metric.icon
 
@@ -283,7 +497,7 @@ function Dashboard() {
                 })}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-5">
                 {modules
                 .filter((module) => module.id !== 'inicio' && hasModuleAccess(module))
                 .map((module) => {
@@ -318,39 +532,41 @@ function Dashboard() {
             </>
           )}
 
-          {activeModule === 'seguridad' && (
-            hasModuleAccess(activeModuleInfo)
-              ? <GestionUsuarios currentUserId={currentUser?.id} />
-              : <ModuleAccessDenied moduleName={activeModuleInfo?.name} />
-          )}
+          <Suspense fallback={<ModuleLoading />}>
+            {activeModule === 'seguridad' && (
+              hasModuleAccess(activeModuleInfo)
+                ? <GestionUsuarios currentUserId={currentUser?.id} />
+                : <ModuleAccessDenied moduleName={activeModuleInfo?.name} />
+            )}
 
-          {activeModule === 'inventarios' && (
-            <Inventarios />
-          )}
+            {activeModule === 'inventarios' && (
+              <Inventarios />
+            )}
 
-          {activeModule === 'produccion' && (
-            <ProduccionRecetas />
-          )}
+            {activeModule === 'produccion' && (
+              <ProduccionRecetas />
+            )}
 
-          {activeModule === 'pos' && (
-            <PuntoVenta />
-          )}
+            {activeModule === 'pos' && (
+              <PuntoVenta />
+            )}
 
-          {activeModule === 'ia' && (
-            <IAPredictiva />
-          )}
+            {activeModule === 'ia' && (
+              <IAPredictiva />
+            )}
 
-          {activeModule === 'estructura-datos' && (
-            <MantenimientoEstructuraDatos />
-          )}
+            {activeModule === 'estructura-datos' && (
+              <MantenimientoEstructuraDatos />
+            )}
 
-          {activeModule === 'configuracion-sistema' && (
-            <ConfiguracionSistema />
-          )}
+            {activeModule === 'configuracion-sistema' && (
+              <ConfiguracionSistema />
+            )}
 
-          {activeModule === 'reportes' && (
-            <Reportes />
-          )}
+            {activeModule === 'reportes' && (
+              <Reportes />
+            )}
+          </Suspense>
 
           {!['inicio', 'seguridad', 'inventarios', 'produccion', 'pos', 'ia', 'estructura-datos', 'configuracion-sistema', 'reportes'].includes(activeModule) && (
             <div className="bg-white rounded-xl shadow-md p-8">

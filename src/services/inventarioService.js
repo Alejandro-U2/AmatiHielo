@@ -1,6 +1,8 @@
 import { getAccessToken } from './authService'
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '')
+import { API_URL as configuredApiUrl } from './apiUrl'
+
+const API_URL = (configuredApiUrl || 'http://localhost:3001').replace(/\/$/, '')
 
 function formatDateTime(value) {
   if (!value) return 'Sin registro'
@@ -115,7 +117,7 @@ function normalizeMovimiento(row) {
     proveedor: row.proveedor?.nombre || row.proveedor_nombre || '',
     cantidad,
     usuario: row.usuario || 'Sistema',
-    motivo: row.motivo || 'Sin motivo',
+    motivo: row.motivo_tipo ? (row.motivo ? `${row.motivo_tipo} - ${row.motivo}` : row.motivo_tipo) : (row.motivo || 'Sin motivo'),
     documentoUrl: row.documento_url || row.documentoUrl || '',
     motivoTipo: row.motivo_tipo || row.motivoTipo || '',
     fechaMovimiento: row.fecha_movimiento || row.fechaMovimiento || row.created_at,

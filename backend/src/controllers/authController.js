@@ -1,7 +1,55 @@
 import { supabaseAdmin } from '../config/supabaseAdmin.js'
 import { supabasePublic } from '../config/supabasePublic.js'
 
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+function resolveFrontendUrl(req) {
+  // 1. Explicitly provided redirectTo or origin in body
+  if (req?.body?.redirectTo) {
+    try {
+      const parsed = new URL(req.body.redirectTo)
+      return parsed.origin
+    } catch {}
+  }
+
+  if (req?.body?.origin) {
+    try {
+      const parsed = new URL(req.body.origin)
+      return parsed.origin
+    } catch {}
+  }
+
+  // 2. Origin header from browser
+  if (req?.headers?.origin) {
+    return String(req.headers.origin).replace(/\/$/, '')
+  }
+
+  // 3. Referer header
+  if (req?.headers?.referer) {
+    try {
+      const parsed = new URL(req.headers.referer)
+      return parsed.origin
+    } catch {}
+  }
+
+  // 4. Forwarded headers (VS Code port forward, devtunnels, ngrok, reverse proxy)
+  const forwardedHost = req?.headers?.['x-forwarded-host']
+  const forwardedProto = req?.headers?.['x-forwarded-proto'] || 'http'
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`.replace(/\/$/, '')
+  }
+
+  // 5. Host header
+  if (req?.headers?.host) {
+    const proto = req.protocol || 'http'
+    const host = String(req.headers.host).replace(':3001', ':5173')
+    return `${proto}://${host}`.replace(/\/$/, '')
+  }
+
+  // 6. Configured FRONTEND_URL environment variable (take first if comma-separated)
+  const rawFrontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+  const firstUrl = rawFrontendUrl.split(',')[0].trim()
+  return (firstUrl || 'http://localhost:5173').replace(/\/$/, '')
+}
+
 const MIN_PASSWORD_LENGTH = 6
 
 function normalizeIdentifier(value = '') {
@@ -119,14 +167,20 @@ export async function forgotPassword(req, res) {
       return res.json({ message: genericMessage })
     }
 
-    const redirectTo = `${frontendUrl}/recuperar`
+    const baseFrontend = resolveFrontendUrl(req)
+    const redirectTo = `${baseFrontend}/recuperar`
+
+    // Enviar correo oficial a través de Supabase al correo del usuario
     const { error } = await supabasePublic.auth.resetPasswordForEmail(email, { redirectTo })
 
     if (error) {
       return res.status(400).json({ message: error.message })
     }
 
-    return res.json({ message: genericMessage })
+    return res.json({
+      message: genericMessage,
+      redirectTo,
+    })
   } catch (error) {
     return res.status(500).json({ message: error?.message || 'No fue posible enviar el enlace.' })
   }
@@ -135,7 +189,7 @@ export async function forgotPassword(req, res) {
 export async function resetPassword(req, res) {
   const { code, email, tokenHash, type, accessToken, password } = req.body || {}
 
-  if (!tokenHash && !(code && email) && !accessToken) {
+  if (!tokenHash && !code && !accessToken) {
     return res.status(400).json({ message: 'El enlace no es válido o ya fue usado.' })
   }
 
@@ -165,17 +219,25 @@ export async function resetPassword(req, res) {
         return res.status(400).json({ message: error?.message || 'El enlace no es válido o ya fue usado.' })
       }
       userId = data.user.id
-    } else {
-      const { data, error } = await supabasePublic.auth.verifyOtp({
-        email,
-        token: code,
-        type: 'recovery',
-      })
-
-      if (error || !data?.user?.id) {
-        return res.status(400).json({ message: error?.message || 'El enlace no es válido o ya fue usado.' })
+    } else if (code) {
+      if (email) {
+        const { data, error } = await supabasePublic.auth.verifyOtp({
+          email,
+          token: code,
+          type: 'recovery',
+        })
+        if (!error && data?.user?.id) {
+          userId = data.user.id
+        }
       }
-      userId = data.user.id
+
+      if (!userId) {
+        const { data, error } = await supabasePublic.auth.exchangeCodeForSession(code)
+        if (error || !data?.user?.id) {
+          return res.status(400).json({ message: error?.message || 'El enlace no es válido o ya fue usado.' })
+        }
+        userId = data.user.id
+      }
     }
 
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {

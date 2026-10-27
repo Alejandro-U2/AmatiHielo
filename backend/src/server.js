@@ -10,6 +10,8 @@ import inventarioRoutes from './routes/inventarioRoutes.js'
 import posRoutes from './routes/posRoutes.js'
 import recetasRoutes from './routes/recetasRoutes.js'
 import usersRoutes from './routes/usersRoutes.js'
+import backupRoutes from './routes/backupRoutes.js'
+import { iniciarBackupScheduler } from './services/backupScheduler.js'
 
 dotenv.config()
 
@@ -27,7 +29,7 @@ const isAllowedOrigin = (origin) => {
     const url = new URL(origin)
     const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
     const isPrivateNetwork = /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(url.hostname)
-    const isPortForward = url.hostname.endsWith('.app.github.dev') || url.hostname.endsWith('.githubpreview.dev')
+    const isPortForward = url.hostname.endsWith('.app.github.dev') || url.hostname.endsWith('.githubpreview.dev') || url.hostname.endsWith('.devtunnels.ms')
     return isLocalhost || isPrivateNetwork || isPortForward
   } catch {
     return false
@@ -57,6 +59,7 @@ app.use('/api/estructura-datos', estructuraDatosRoutes)
 app.use('/api/inventario', inventarioRoutes)
 app.use('/api/pos', posRoutes)
 app.use('/api/recetas', recetasRoutes)
+app.use('/api/backup', backupRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Ruta no encontrada.' })
@@ -69,4 +72,5 @@ app.use((error, req, res, _next) => {
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`AMATI backend escuchando en el puerto ${port}`)
+  iniciarBackupScheduler().catch((err) => console.error('[Server] Error iniciando backup scheduler:', err))
 })

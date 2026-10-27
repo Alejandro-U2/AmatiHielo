@@ -1,0 +1,50 @@
+[
+  {
+    "nombre_archivo": "backup_amati_2026-10-26T23-43-21_manual.json.gz",
+    "tipo": "manual",
+    "tamano_bytes": 3054904,
+    "estado": "completado",
+    "total_tablas": 29,
+    "total_registros": 641,
+    "formato": "json_gz",
+    "checksum": "5d4795e90e4bb8807bf0c43318c76a996be9816447110a32e0e64c1c33f2c246",
+    "storage_path": "system-backups/backup_amati_2026-10-26T23-43-21_manual.json.gz",
+    "metadata": {
+      "duracion_ms": 12157,
+      "tablas": [
+        "producto",
+        "proveedor",
+        "movimiento_inventario",
+        "tipo_movimiento",
+        "receta",
+        "produccion",
+        "auditoria_inventario",
+        "auditoria_inventario_detalle",
+        "ingrediente_receta",
+        "plan_produccion",
+        "venta_pos",
+        "venta_pos_detalle",
+        "rol",
+        "estado_usuario",
+        "catalogo_categoria_inventario",
+        "departamento",
+        "municipio",
+        "metodo_pago",
+        "catalogo_categoria_receta",
+        "estado_producto",
+        "cliente",
+        "factura",
+        "orden_compra",
+        "orden_compra_detalle",
+        "estado_orden_compra",
+        "catalogo_presentacion_receta",
+        "unidad_medida",
+        "perfil",
+        "historial_clima"
+      ]
+    },
+    "created_at": "2026-10-26T23:43:21.536Z",
+    "created_by": "Administrador AMATI",
+    "id": "bk-1793058213829"
+  }
+]
