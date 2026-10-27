@@ -50,6 +50,9 @@ function mapDuplicateMessage(message = '') {
 }
 
 function validateNombre(nombre) {
+  if (/\d/.test(nombre || '')) {
+    return 'No se permiten números en nombres o apellidos.'
+  }
   if (!NAME_REGEX.test(nombre || '')) {
     return 'El nombre solo puede contener letras, espacios y acentos.'
   }
