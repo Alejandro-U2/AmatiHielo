@@ -332,13 +332,15 @@ export async function listVentas(req, res) {
 export async function createVenta(req, res) {
   const items = (req.body?.items || []).map(normalizeVentaItem)
   const metodoPago = req.body?.metodoPago || req.body?.metodo_pago || 'Efectivo'
-  const cliente = req.body?.cliente || null
   const clienteId = Number(req.body?.clienteId ?? req.body?.cliente_id)
   const usuario = req.auth?.profile?.nombre || req.auth?.user?.email || 'Sistema'
   const necesitaFactura = req.body?.necesitaFactura || req.body?.necesita_factura || false
   const nit = req.body?.nit || null
   const nombreCliente = req.body?.nombreCliente || req.body?.nombre_cliente || null
   const numeroTelefono = req.body?.numeroTelefono || req.body?.numero_telefono || null
+  const cliente = String(req.body?.cliente || '').trim()
+    || (necesitaFactura ? nombreCliente : null)
+    || 'Cliente General'
 
   if (items.length === 0) {
     return res.status(400).json({ message: 'La venta debe incluir al menos un producto.' })
@@ -372,7 +374,7 @@ export async function createVenta(req, res) {
     const { data, error } = await supabaseAdmin.rpc('registrar_venta_pos_consumo_directo', {
       p_items: items,
       p_metodo_pago: metodoPago,
-      p_cliente: cliente || null,
+      p_cliente: cliente,
       p_usuario: usuario,
       p_necesita_factura: necesitaFactura,
       p_nit: nit,
