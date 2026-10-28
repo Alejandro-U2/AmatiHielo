@@ -81,11 +81,23 @@ function normalizeVenta(row = {}) {
   }
 }
 
-export async function listVentasPos({ desde, hasta, todos = false } = {}) {
+export async function getDashboardMetrics() {
+  const payload = await request('/api/pos/metricas-dashboard')
+  return payload?.data || { ventasHoy: 0, transaccionesHoy: 0, stockTotal: 0, recetasTotal: 0 }
+}
+
+export async function getVentaPos(id) {
+  if (!id) return null
+  const payload = await request(`/api/pos/venta/${id}`)
+  return payload?.data ? normalizeVenta(payload.data) : null
+}
+
+export async function listVentasPos({ desde, hasta, todos = false, includeDetalles = false } = {}) {
   const query = new URLSearchParams()
   if (desde) query.set('desde', desde)
   if (hasta) query.set('hasta', hasta)
   if (todos) query.set('todos', 'true')
+  if (includeDetalles) query.set('includeDetalles', 'true')
   const queryString = query.toString()
   const payload = await request(`/api/pos/venta${queryString ? `?${queryString}` : ''}`)
   return (payload?.data || []).map(normalizeVenta)

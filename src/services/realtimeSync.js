@@ -35,7 +35,7 @@ export function notifyDataChange(type = 'all') {
  * @returns {() => void} Función para desuscribir
  */
 export function subscribeToDataChanges(onDataChange, options = {}) {
-  const { intervalSeconds = 15, types = ['all'] } = options
+  const { intervalSeconds = 60, types = ['all'] } = options
 
   const shouldTrigger = (eventType) => {
     if (types.includes('all') || types.includes(eventType) || eventType === 'all') {
@@ -113,7 +113,7 @@ export function subscribeToDataChanges(onDataChange, options = {}) {
 
   // 4. Refresco al volver a enfocar la pestaña (Page Visibility / Window Focus) con deduplicación y throttle
   let lastWindowActiveTrigger = 0
-  const WINDOW_COOLDOWN_MS = 20000
+  const WINDOW_COOLDOWN_MS = 30000
 
   const handleWindowActive = (source) => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {

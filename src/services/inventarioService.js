@@ -63,6 +63,7 @@ async function request(path, options = {}) {
 function normalizeCategoria(row) {
   return {
     id: row.id,
+    productoId: row.producto_id ?? row.producto?.id ?? null,
     codigo: row.codigo,
     nombre: row.nombre,
     descripcion: row.descripcion || '',
@@ -103,7 +104,9 @@ function normalizeProducto(row) {
 function normalizeMovimiento(row) {
   const createdAt = row.createdAt ?? row.created_at ?? row.fecha
   const cantidad = Math.abs(Number(row.cantidad || 0))
-  const costoUnitario = Number(row.costo_unitario_movimiento ?? row.costo_unitario ?? 0)
+  const rawCosto = Number(row.costo_unitario_movimiento ?? row.costo_unitario ?? row.costoUnitario ?? 0)
+  const fallbackCosto = Number(row.producto?.costo_unitario ?? row.producto?.precio_compra ?? 0)
+  const costoUnitario = rawCosto > 0 ? rawCosto : fallbackCosto
   const perdidaEconomica = row.perdida_economica === null || row.perdida_economica === undefined
     ? (row.tipo === 'Merma' ? Number((cantidad * costoUnitario).toFixed(2)) : 0)
     : Number(row.perdida_economica)

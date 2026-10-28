@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   Banknote,
+  Check,
   CheckCircle2,
   Coins,
+  CreditCard,
   ExternalLink,
   FileDown,
+  FileText,
   Lock,
   Minus,
   Package,
   Plus,
+  QrCode,
+  Receipt,
   ReceiptText,
+  Save,
   ShoppingCart,
+  Sparkles,
   Trash2,
   TrendingUp,
+  User,
   Wallet,
   WalletCards,
   X,
@@ -24,6 +33,7 @@ import { getRecetas } from '../../services/recetasService'
 import {
   createClientePos,
   createVentaPos,
+  getVentaPos,
   listClientesPos,
   listMetodosPago,
   listVentasPos,
@@ -181,6 +191,18 @@ function PuntoVenta() {
     }
   }
   const [selectedVenta, setSelectedVenta] = useState(null)
+
+  const handleOpenTicket = async (venta) => {
+    setSelectedVenta(venta)
+    if (!venta.detalles || venta.detalles.length === 0) {
+      try {
+        const fullVenta = await getVentaPos(venta.id)
+        if (fullVenta) setSelectedVenta(fullVenta)
+      } catch {
+        // Fallback: conserva los datos de cabecera
+      }
+    }
+  }
   const [isLoading, setIsLoading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [arqueoResumen, setArqueoResumen] = useState(null)
@@ -288,7 +310,7 @@ function PuntoVenta() {
       if (type === 'ventas' || type === 'caja' || type === 'all') {
         cargarArqueo()
       }
-    }, { intervalSeconds: 15, types: ['all', 'ventas', 'recetas', 'caja', 'inventario'] })
+    }, { intervalSeconds: 45, types: ['all', 'ventas', 'recetas', 'caja', 'inventario'] })
 
     return () => unsubscribe()
   }, [])
@@ -1132,7 +1154,7 @@ function PuntoVenta() {
                     <td className="px-4 md:px-6 py-4 text-right">
                       <button
                         type="button"
-                        onClick={() => setSelectedVenta(venta)}
+                        onClick={() => handleOpenTicket(venta)}
                         className="px-3 py-2 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-700 transition-colors whitespace-nowrap"
                       >
                         Ver ticket
@@ -1456,350 +1478,446 @@ function PuntoVenta() {
       )}
 
       {selectedVenta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-cyan-600 to-blue-700 text-white px-4 md:px-6 py-5 rounded-t-lg">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-sm text-cyan-100">Ticket de venta</p>
-                  <h3 className="text-xl md:text-2xl font-bold font-mono break-all">{selectedVenta.ticket}</h3>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col border border-gray-100 dark:border-slate-800 transition-all overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Sticky */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-blue-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shadow-sm">
+                  <ReceiptText className="w-5 h-5" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedVenta(null)}
-                  className="px-3 py-2 bg-white/15 hover:bg-white/25 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
-                >
-                  Cerrar
-                </button>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    Comprobante de Venta
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                    Ticket: {selectedVenta.ticket}
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVenta(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="p-4 md:p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Fecha/Hora</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedVenta.fecha}</p>
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl border border-gray-200 dark:border-slate-700/80 bg-gray-50/70 dark:bg-slate-800/40">
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Fecha / Hora</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{selectedVenta.fecha}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Cliente</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedVenta.cliente}</p>
+                <div className="p-3.5 rounded-xl border border-gray-200 dark:border-slate-700/80 bg-gray-50/70 dark:bg-slate-800/40">
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Cliente</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{selectedVenta.cliente}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Metodo pago</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedVenta.metodoPago}</p>
+                <div className="p-3.5 rounded-xl border border-gray-200 dark:border-slate-700/80 bg-gray-50/70 dark:bg-slate-800/40">
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Método de Pago</p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-cyan-100 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300">
+                    {selectedVenta.metodoPago}
+                  </span>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Vendedor</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedVenta.usuario}</p>
+                <div className="p-3.5 rounded-xl border border-gray-200 dark:border-slate-700/80 bg-gray-50/70 dark:bg-slate-800/40">
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Cajero / Vendedor</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{selectedVenta.usuario}</p>
                 </div>
               </div>
 
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
-                  <h4 className="font-bold text-gray-800">Detalle del ticket</h4>
+              {/* Items Table */}
+              <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-slate-700/60">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                    <ShoppingCart className="w-4 h-4 text-cyan-500" />
+                    <span>Detalle de Artículos Vendidos</span>
+                  </div>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 font-bold border border-cyan-200 dark:border-cyan-800">
+                    {selectedVenta.detalles?.length || 0} línea(s)
+                  </span>
                 </div>
-                <div className="overflow-x-auto touch-scroll">
-                  <table className="min-w-full">
-                    <thead className="bg-white border-b border-gray-200">
-                      <tr>
-                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Producto</th>
-                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Cantidad</th>
-                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Precio</th>
-                        <th className="px-5 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {selectedVenta.detalles?.length > 0 ? selectedVenta.detalles.map((detalle) => (
-                        <tr key={detalle.id || `${detalle.recetaId}-${detalle.nombre}`}>
-                          <td className="px-5 py-4">
-                            <p className="text-sm font-semibold text-gray-900">{detalle.nombre}</p>
-                            <p className="text-xs text-gray-500">
-                              {[detalle.codigo, detalle.presentacion].filter(Boolean).join(' - ') || 'Producto POS'}
-                            </p>
-                          </td>
-                          <td className="px-5 py-4 text-right text-sm text-gray-700">{detalle.cantidad}</td>
-                          <td className="px-5 py-4 text-right text-sm text-gray-700">Q{detalle.precioUnitario.toFixed(2)}</td>
-                          <td className="px-5 py-4 text-right text-sm font-bold text-gray-900">Q{detalle.total.toFixed(2)}</td>
-                        </tr>
-                      )) : (
+
+                <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+                      <thead className="bg-gray-50 dark:bg-slate-800/70">
                         <tr>
-                          <td colSpan="4" className="px-5 py-8 text-center text-sm text-gray-500">
-                            Esta venta no tiene detalle disponible.
-                          </td>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Producto / Presentación</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Cantidad</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Precio Unit.</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Subtotal Línea</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-700/60 bg-white dark:bg-slate-900/40">
+                        {selectedVenta.detalles?.length > 0 ? selectedVenta.detalles.map((detalle) => (
+                          <tr key={detalle.id || `${detalle.recetaId}-${detalle.nombre}`} className="hover:bg-gray-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{detalle.nombre}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {[detalle.codigo, detalle.presentacion].filter(Boolean).join(' · ') || 'Producto Terminado'}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-gray-800 dark:text-gray-200">{detalle.cantidad}</td>
+                            <td className="px-4 py-3 text-right text-sm font-mono text-gray-600 dark:text-gray-400">Q{detalle.precioUnitario.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-right text-sm font-bold font-mono text-gray-900 dark:text-white">Q{detalle.total.toFixed(2)}</td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan="4" className="px-4 py-8 text-center text-xs text-gray-500 dark:text-gray-400 italic">
+                              Esta venta no tiene detalle disponible.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className={`rounded-lg border-2 p-5 ${
-                  selectedVenta.necesitaFactura ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
+              {/* Bottom Cards: Factura FEL + Totales */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className={`rounded-xl border p-4 transition-all ${
+                  selectedVenta.necesitaFactura
+                    ? 'border-blue-200 dark:border-blue-800/80 bg-blue-50/60 dark:bg-blue-950/30'
+                    : 'border-gray-200 dark:border-slate-700/80 bg-gray-50/60 dark:bg-slate-800/30'
                 }`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-bold text-gray-800">Datos para factura</h4>
-                    <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                      selectedVenta.necesitaFactura ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-current/10">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <h4 className="font-semibold text-sm text-gray-900 dark:text-white">Facturación Electrónica (FEL)</h4>
+                    </div>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                      selectedVenta.necesitaFactura
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300'
                     }`}>
-                      {selectedVenta.necesitaFactura ? 'Solicitada' : 'No solicitada'}
+                      {selectedVenta.necesitaFactura ? 'Factura Requerida' : 'Sin Factura'}
                     </span>
                   </div>
+
                   {selectedVenta.necesitaFactura ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase font-semibold">NIT</p>
-                        <p className="text-sm font-bold text-gray-900">{selectedVenta.nit || 'Sin dato'}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                      <div className="p-2.5 rounded-lg bg-white/70 dark:bg-slate-800/70 border border-blue-100 dark:border-blue-900/40">
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-semibold">NIT Receptor</p>
+                        <p className="text-xs font-bold font-mono text-gray-900 dark:text-white mt-0.5">{selectedVenta.nit || 'CF'}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase font-semibold">Nombre</p>
-                        <p className="text-sm font-bold text-gray-900">{selectedVenta.nombreCliente || 'Sin dato'}</p>
+                      <div className="p-2.5 rounded-lg bg-white/70 dark:bg-slate-800/70 border border-blue-100 dark:border-blue-900/40">
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-semibold">Nombre Cliente</p>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white mt-0.5 truncate">{selectedVenta.nombreCliente || 'Consumidor Final'}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase font-semibold">Telefono</p>
-                        <p className="text-sm font-bold text-gray-900">{selectedVenta.numeroTelefono || 'Sin dato'}</p>
+                      <div className="p-2.5 rounded-lg bg-white/70 dark:bg-slate-800/70 border border-blue-100 dark:border-blue-900/40">
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-semibold">Teléfono</p>
+                        <p className="text-xs font-bold font-mono text-gray-900 dark:text-white mt-0.5">{selectedVenta.numeroTelefono || '—'}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-600">La venta fue registrada sin solicitud de factura.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 py-2">
+                      Esta transacción fue registrada bajo la modalidad de venta al menudeo estándar sin emisión de documento tributario individual.
+                    </p>
                   )}
                 </div>
 
-                <div className="rounded-lg border border-gray-200 p-5">
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal</span>
-                      <span className="font-semibold text-gray-900">Q{selectedVenta.subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">{ivaLabel}</span>
-                      <span className="font-semibold text-gray-900">Q{selectedVenta.iva.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-xl font-bold pt-3 border-t border-gray-200">
-                      <span>Total</span>
-                      <span className="text-green-600">Q{selectedVenta.total.toFixed(2)}</span>
-                    </div>
+                {/* Totales Card */}
+                <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 space-y-2.5">
+                  <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
+                    <span>Subtotal Neto</span>
+                    <span className="font-semibold font-mono text-gray-800 dark:text-gray-200">Q{selectedVenta.subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
+                    <span>{ivaLabel}</span>
+                    <span className="font-semibold font-mono text-gray-800 dark:text-gray-200">Q{selectedVenta.iva.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-lg font-black pt-2.5 border-t border-gray-200 dark:border-slate-700">
+                    <span className="text-gray-900 dark:text-white">Total Cobrado</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-mono">Q{selectedVenta.total.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Sticky Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/80 dark:bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-10 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedVenta(null)}
+                className="px-6 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors"
+              >
+                Cerrar Comprobante
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {showModal && modalType === 'pago' && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[94vh] flex flex-col my-3 sm:my-0">
-            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-5 py-3 rounded-t-lg flex-shrink-0">
-              <h3 className="text-xl font-bold">Procesar Pago</h3>
-              <p className="text-sm text-green-100 mt-1">Total a cobrar: Q{calcularTotal().toFixed(2)}</p>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-xl w-full max-h-[94vh] flex flex-col my-3 sm:my-0 border border-gray-100 dark:border-slate-800 transition-all overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Sticky */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-sm">
+                  <WalletCards className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    Procesar Cobro
+                  </h3>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                    Total a cobrar: Q{calcularTotal().toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={isProcessing}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto">
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-4">
               {errorMsg && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {errorMsg}
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>{errorMsg}</span>
                 </div>
               )}
               {successMsg && (
-                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                  {successMsg}
+                <div className="rounded-xl border border-green-200 bg-green-50 p-3.5 text-xs font-medium text-green-700 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" />
+                  <span>{successMsg}</span>
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {metodosPago.map((metodo) => (
-                    <button
-                      key={metodo}
-                      type="button"
-                      onClick={() => setMetodoPago(metodo)}
-                      className={`py-2 px-3 border-2 rounded-lg font-medium hover:bg-green-50 transition-colors ${
-                        metodoPago === metodo
-                          ? 'border-green-500 bg-green-50 text-green-700'
-                          : 'border-gray-300 bg-white text-gray-700'
-                      }`}
-                    >
-                      {metodo}
-                    </button>
-                  ))}
+              {/* Card 1: Método de Pago */}
+              <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white pb-2 border-b border-gray-100 dark:border-slate-700/60">
+                  <Wallet className="w-4 h-4 text-emerald-500" />
+                  <span>Método de Pago</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {metodosPago.map((metodo) => {
+                    const isSelected = metodoPago === metodo
+                    return (
+                      <button
+                        key={metodo}
+                        type="button"
+                        onClick={() => setMetodoPago(metodo)}
+                        className={`py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-between border-2 ${
+                          isSelected
+                            ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 shadow-sm'
+                            : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700/60'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          {metodo.toLowerCase().includes('efectivo') ? (
+                            <Banknote className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <CreditCard className="w-4 h-4 text-blue-600" />
+                          )}
+                          <span>{metodo}</span>
+                        </span>
+                        {isSelected && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
-              <div className="border-t pt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Cliente frecuente</label>
-                <select
-                  value={clienteSeleccionadoId}
-                  onChange={(event) => {
-                    const id = event.target.value
-                    const cliente = clientes.find((item) => String(item.id) === String(id))
-                    setClienteSeleccionadoId(id)
-                    if (cliente) {
-                      setDatosFactura({
-                        nit: cliente.nit || '',
-                        nombreCliente: cliente.nombre || '',
-                        numeroTelefono: cliente.telefono || '',
-                      })
-                      if (cliente.nit) {
-                        setNecesitaFactura(true)
+              {/* Card 2: Cliente */}
+              <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white pb-2 border-b border-gray-100 dark:border-slate-700/60">
+                  <User className="w-4 h-4 text-cyan-500" />
+                  <span>Cliente Frecuente / Registrado</span>
+                </div>
+
+                <div>
+                  <select
+                    value={clienteSeleccionadoId}
+                    onChange={(event) => {
+                      const id = event.target.value
+                      const cliente = clientes.find((item) => String(item.id) === String(id))
+                      setClienteSeleccionadoId(id)
+                      if (cliente) {
+                        setDatosFactura({
+                          nit: cliente.nit || '',
+                          nombreCliente: cliente.nombre || '',
+                          numeroTelefono: cliente.telefono || '',
+                        })
+                        if (cliente.nit) {
+                          setNecesitaFactura(true)
+                        }
+                      } else {
+                        setDatosFactura({
+                          nit: '',
+                          nombreCliente: '',
+                          numeroTelefono: '',
+                        })
+                        setNecesitaFactura(false)
                       }
-                    } else {
-                      setDatosFactura({
-                        nit: '',
-                        nombreCliente: '',
-                        numeroTelefono: '',
-                      })
-                      setNecesitaFactura(false)
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                >
-                  <option value="">Cliente ocasional / ingresar manualmente</option>
-                  {clientes.map((cliente) => (
-                    <option key={cliente.id} value={cliente.id}>
-                      {cliente.codigo} · {cliente.nombre}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500">
-                  Al seleccionar un cliente se cargan los datos disponibles; puedes completar o corregir la información.
-                </p>
+                    }}
+                    className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
+                  >
+                    <option value="">Cliente ocasional / Ingreso manual</option>
+                    {clientes.map((cliente) => (
+                      <option key={cliente.id} value={cliente.id}>
+                        {cliente.codigo} · {cliente.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-[11px] text-gray-400">
+                    Al seleccionar un cliente frecuente se precargarán automáticamente sus datos de facturación.
+                  </p>
+                </div>
               </div>
 
-              <div className="border-t pt-3">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="block text-sm font-medium text-gray-700">¿Necesita Factura?</label>
+              {/* Card 3: Facturación SAT FEL */}
+              <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-slate-700/60">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                    <FileText className="w-4 h-4 text-blue-500" />
+                    <span>Factura Electrónica (SAT FEL)</span>
+                  </div>
                   <a
                     href="https://farm3.sat.gob.gt/menu/login.jsf"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold"
                     title="Abrir portal de la SAT para emitir factura"
                   >
                     <span>Portal SAT FEL</span>
                     <ExternalLink size={12} />
                   </a>
                 </div>
-                <div className="flex gap-2">
+
+                <div className="flex gap-2.5">
                   <button
                     type="button"
                     onClick={() => setNecesitaFactura(true)}
-                    className={`flex-1 py-2 px-3 border-2 rounded-lg font-medium transition-colors ${
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border-2 ${
                       necesitaFactura
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 shadow-sm'
+                        : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    Sí
+                    Sí, requiere Factura
                   </button>
                   <button
                     type="button"
                     onClick={() => setNecesitaFactura(false)}
-                    className={`flex-1 py-2 px-3 border-2 rounded-lg font-medium transition-colors ${
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border-2 ${
                       !necesitaFactura
-                        ? 'border-gray-500 bg-gray-50 text-gray-700'
-                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        ? 'border-gray-500 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-gray-200 shadow-sm'
+                        : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    No
+                    No requerida
                   </button>
                 </div>
+
+                {necesitaFactura && (
+                  <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-800/80 bg-blue-50/50 dark:bg-blue-950/30 space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">
+                        NIT Receptor *
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Ej: 123456789 o CF"
+                        value={datosFactura.nit}
+                        onChange={(e) => setDatosFactura({ ...datosFactura, nit: sanitizeNIT(e.target.value) })}
+                        className="w-full px-3.5 py-2 text-sm font-mono font-semibold border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-800 dark:text-gray-200"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">
+                          Nombre / Razón Social *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Nombre del Cliente"
+                          value={datosFactura.nombreCliente}
+                          onChange={(e) => {
+                            const cleaned = sanitizeNombreCliente(e.target.value)
+                            setDatosFactura({ ...datosFactura, nombreCliente: cleaned })
+                          }}
+                          onBlur={(e) => setDatosFactura({ ...datosFactura, nombreCliente: capitalizeWords(e.target.value) })}
+                          className="w-full px-3.5 py-2 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-800 dark:text-gray-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">
+                          Número de Teléfono *
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Ej: 50212345678"
+                          value={datosFactura.numeroTelefono}
+                          onChange={(e) => {
+                            const cleaned = sanitizeTelefono(e.target.value)
+                            setDatosFactura({ ...datosFactura, numeroTelefono: cleaned })
+                          }}
+                          className="w-full px-3.5 py-2 text-sm font-mono border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-800 dark:text-gray-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {necesitaFactura && (
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="sm:col-span-2 flex items-center justify-between pb-1 border-b border-blue-200/60">
-                    <span className="text-xs font-semibold text-blue-800">Datos para Facturación Electrónica</span>
-                    <a
-                      href="https://farm3.sat.gob.gt/menu/login.jsf"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium shadow-xs transition-colors"
-                      title="Ir a SAT Agencia Virtual"
-                    >
-                      <ExternalLink size={11} />
-                      <span>Ir a SAT</span>
-                    </a>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">NIT *</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Ej: 1234567890101"
-                      value={datosFactura.nit}
-                      onChange={(e) => setDatosFactura({ ...datosFactura, nit: sanitizeNIT(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Cliente *</label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Nombre del Cliente"
-                      value={datosFactura.nombreCliente}
-                      onChange={(e) => {
-                        const cleaned = sanitizeNombreCliente(e.target.value)
-                        setDatosFactura({ ...datosFactura, nombreCliente: cleaned })
-                      }}
-                      onBlur={(e) => setDatosFactura({ ...datosFactura, nombreCliente: capitalizeWords(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Número Teléfono *</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Ej: 50271234567"
-                      value={datosFactura.numeroTelefono}
-                      onChange={(e) => {
-                        const cleaned = sanitizeTelefono(e.target.value)
-                        setDatosFactura({ ...datosFactura, numeroTelefono: cleaned })
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+              {/* Card 4: Resumen de Totales */}
+              <div className="rounded-xl border border-cyan-200 dark:border-cyan-800/80 bg-cyan-50/60 dark:bg-cyan-950/30 p-4 space-y-2">
+                <div className="flex justify-between items-center text-xs text-gray-700 dark:text-gray-300">
+                  <span>Subtotal Neto:</span>
+                  <span className="font-bold font-mono text-cyan-800 dark:text-cyan-200">Q{calcularSubtotal().toFixed(2)}</span>
                 </div>
-              )}
-
-              <div className="bg-cyan-50 border-2 border-cyan-200 rounded-lg p-3">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-700">Subtotal:</span>
-                  <span className="text-base font-bold text-cyan-700">Q{calcularSubtotal().toFixed(2)}</span>
+                <div className="flex justify-between items-center text-xs text-gray-700 dark:text-gray-300">
+                  <span>{ivaLabel}:</span>
+                  <span className="font-bold font-mono text-cyan-800 dark:text-cyan-200">Q{calcularIVA().toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-700">{ivaLabel}:</span>
-                  <span className="text-base font-bold text-cyan-700">Q{calcularIVA().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center border-t border-cyan-200 pt-2">
-                  <span className="text-sm text-gray-700">Total:</span>
-                  <span className="text-xl font-bold text-green-600">Q{calcularTotal().toFixed(2)}</span>
+                <div className="flex justify-between items-center pt-2 border-t border-cyan-200 dark:border-cyan-800 text-base font-black">
+                  <span className="text-gray-900 dark:text-white">Total a Cobrar:</span>
+                  <span className="text-xl text-emerald-600 dark:text-emerald-400 font-mono">Q{calcularTotal().toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3 rounded">
-                <p className="text-xs text-yellow-800">
-                  Al confirmar, se validará stock suficiente de todos los insumos del BOM y se registrarán salidas automáticas de materia prima.
+              {/* Safety notice */}
+              <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-800/80 bg-amber-50/80 dark:bg-amber-950/30 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Al confirmar, se validará stock suficiente de materias primas en el BOM y se registrarán las salidas de inventario correspondientes.
                 </p>
               </div>
             </div>
 
-            <div className="px-5 py-3 bg-gray-50 rounded-b-lg flex justify-end gap-3 flex-shrink-0 border-t border-gray-200">
+            {/* Sticky Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/80 dark:bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-10 flex items-center justify-end gap-3">
               <button
+                type="button"
                 onClick={closeModal}
                 disabled={isProcessing}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:bg-gray-400"
+                className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={confirmarVenta}
                 disabled={isProcessing || carrito.length === 0}
-                className="px-6 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold rounded-lg hover:shadow-lg transition-shadow disabled:from-green-300 disabled:to-green-400"
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-emerald-500/25 transition-all inline-flex items-center gap-2 disabled:opacity-50"
               >
-                {isProcessing ? 'Validando...' : 'Confirmar Venta'}
+                <Check className="w-4 h-4" />
+                <span>{isProcessing ? 'Validando...' : 'Confirmar Venta'}</span>
               </button>
             </div>
           </div>
@@ -1807,64 +1925,67 @@ function PuntoVenta() {
       )}
 
       {showModal && modalType === 'arqueo' && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full max-h-[95vh] flex flex-col overflow-hidden border border-gray-100 dark:border-slate-800 transition-all animate-in zoom-in-95 duration-200">
             {/* Header del modal */}
-            <div className="bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-700 text-white px-6 py-4 flex-shrink-0">
-              <div className="flex justify-between items-start">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-blue-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shadow-sm">
+                  <Coins className="w-5 h-5" />
+                </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-5 h-5 text-cyan-200" />
-                    <h3 className="text-lg font-bold">Arqueo y Liquidación Semanal</h3>
-                  </div>
-                  <p className="text-xs text-cyan-100 mt-0.5">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    Arqueo y Liquidación Semanal
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Período: {arqueoPeriodo.periodoInicio.toLocaleDateString('es-GT')} al {arqueoPeriodo.periodoFin.toLocaleDateString('es-GT')}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
               </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Cuerpo del formulario */}
             <form onSubmit={handleConfirmarArqueo} className="p-5 sm:p-6 space-y-4 overflow-y-auto">
               {errorMsg && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
-                  {errorMsg}
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>{errorMsg}</span>
                 </div>
               )}
 
               {/* Resumen del dinero disponible */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
-                <div className="flex justify-between text-slate-600">
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Sencillo de apertura (Fondo anterior):</span>
-                  <span className="font-bold text-slate-800">Q{arqueoCaja.fondoInicial.toFixed(2)}</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">Q{arqueoCaja.fondoInicial.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Ventas en efectivo de la semana:</span>
-                  <span className="font-bold text-emerald-700">+Q{arqueoCaja.ventasEfectivo.toFixed(2)}</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400 font-mono">+Q{arqueoCaja.ventasEfectivo.toFixed(2)}</span>
                 </div>
-                <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-black text-cyan-800">
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between text-sm font-black text-cyan-800 dark:text-cyan-300">
                   <span>Total Efectivo en Gaveta:</span>
-                  <span>Q{arqueoCaja.totalEfectivoEsperado.toFixed(2)}</span>
+                  <span className="font-mono">Q{arqueoCaja.totalEfectivoEsperado.toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Campo 1: Sencillo a dejar en caja */}
-              <div className="bg-cyan-50/70 border border-cyan-200 rounded-xl p-4">
-                <label className="block text-xs font-bold text-slate-800 mb-1">
+              <div className="bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800/80 rounded-xl p-4">
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                   Sencillo a dejar en caja para cambio (GTQ) *
                 </label>
-                <p className="text-[11px] text-slate-500 mb-2">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
                   Dinero que permanecerá en la gaveta como fondo de cambio para la siguiente semana.
                 </p>
                 <div className="relative mb-2">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Q</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Q</span>
                   <input
                     type="number"
                     step="0.01"
@@ -1873,13 +1994,13 @@ function PuntoVenta() {
                     required
                     value={arqueoForm.sencilloDejado}
                     onChange={(e) => setArqueoForm({ ...arqueoForm, sencilloDejado: e.target.value })}
-                    className="w-full pl-8 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-base font-extrabold text-slate-900 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    className="w-full pl-8 pr-4 py-2.5 bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-base font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     placeholder="200.00"
                   />
                 </div>
                 {/* Accesos rápidos */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-slate-500 font-semibold mr-1">Sugeridos:</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mr-1">Sugeridos:</span>
                   {[100, 200, 300, 500].map((monto) => (
                     <button
                       key={monto}
@@ -1888,7 +2009,7 @@ function PuntoVenta() {
                       className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
                         Number(arqueoForm.sencilloDejado) === monto
                           ? 'bg-cyan-600 text-white border-cyan-600'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       Q{monto}
@@ -1898,15 +2019,15 @@ function PuntoVenta() {
               </div>
 
               {/* Cálculo en vivo de Efectivo a Retirar */}
-              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4">
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-300 dark:border-emerald-800/80 rounded-xl p-4">
+                <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
                   Efectivo neto a retirar / liquidar
                 </span>
                 <div className="flex justify-between items-baseline mt-1">
-                  <span className="text-2xl font-black text-emerald-700">
+                  <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
                     Q{Math.max(0, arqueoCaja.totalEfectivoEsperado - Number(arqueoForm.sencilloDejado || 0)).toFixed(2)}
                   </span>
-                  <span className="text-xs text-emerald-700 font-medium">
+                  <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
                     (Ventas retiradas para depósito)
                   </span>
                 </div>
@@ -1914,32 +2035,32 @@ function PuntoVenta() {
 
               {/* Campo 2: Efectivo físico contado (Opcional) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Efectivo físico contado en gaveta (Opcional para cuadre)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Q</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Q</span>
                   <input
                     type="number"
                     step="0.01"
                     value={arqueoForm.efectivoReal}
                     onChange={(e) => setArqueoForm({ ...arqueoForm, efectivoReal: e.target.value })}
-                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-cyan-500"
+                    className="w-full pl-8 pr-4 py-2.5 border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     placeholder={`Esperado: Q${arqueoCaja.totalEfectivoEsperado.toFixed(2)}`}
                   />
                 </div>
                 {arqueoForm.efectivoReal !== '' && !Number.isNaN(Number(arqueoForm.efectivoReal)) && (
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold">
                     {Number(arqueoForm.efectivoReal) === arqueoCaja.totalEfectivoEsperado ? (
-                      <span className="text-emerald-600 flex items-center gap-1">
+                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <CheckCircle2 size={13} /> Cuadre exacto (sin diferencias)
                       </span>
                     ) : Number(arqueoForm.efectivoReal) > arqueoCaja.totalEfectivoEsperado ? (
-                      <span className="text-blue-600 flex items-center gap-1">
+                      <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1">
                         <ArrowRight size={13} /> Sobrante: +Q{(Number(arqueoForm.efectivoReal) - arqueoCaja.totalEfectivoEsperado).toFixed(2)}
                       </span>
                     ) : (
-                      <span className="text-rose-600 flex items-center gap-1">
+                      <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
                         <AlertCircle size={13} /> Faltante: -Q{(arqueoCaja.totalEfectivoEsperado - Number(arqueoForm.efectivoReal)).toFixed(2)}
                       </span>
                     )}
@@ -1949,30 +2070,30 @@ function PuntoVenta() {
 
               {/* Campo 3: Observaciones */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Observaciones (Opcional)</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Observaciones (Opcional)</label>
                 <textarea
                   rows={2}
                   value={arqueoForm.observaciones}
                   onChange={(e) => setArqueoForm({ ...arqueoForm, observaciones: e.target.value })}
                   placeholder="Notas sobre el cierre, denominaciones de billetes en sencillo, etc."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3.5 py-2.5 border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </div>
 
               {/* Botones de acción */}
-              <div className="pt-2 flex justify-end gap-2.5">
+              <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={isConfirmingArqueo}
-                  className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-semibold text-xs hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isConfirmingArqueo}
-                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Lock className="w-4 h-4" />
                   <span>{isConfirmingArqueo ? 'Confirmando...' : 'Confirmar Arqueo y Guardar Sencillo'}</span>

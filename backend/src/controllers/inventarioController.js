@@ -184,6 +184,31 @@ const MOVIMIENTO_SORT_COLUMNS = {
   usuario: 'usuario',
 }
 
+const signedUrlCache = new Map()
+async function getCachedSignedUrl(path) {
+  if (!path) return null
+  const now = Date.now()
+  const cached = signedUrlCache.get(path)
+  if (cached && cached.expiresAt > now + 5 * 60 * 1000) {
+    return cached.url
+  }
+  try {
+    const { data: signedUrlData } = await supabaseAdmin.storage
+      .from(ENTRADA_DOCUMENTOS_BUCKET)
+      .createSignedUrl(path, 60 * 60)
+    if (signedUrlData?.signedUrl) {
+      signedUrlCache.set(path, {
+        url: signedUrlData.signedUrl,
+        expiresAt: now + 50 * 60 * 1000,
+      })
+      return signedUrlData.signedUrl
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
 export async function listMovimientos(req, res) {
   try {
     const params = parseListQuery(req.query, {
@@ -289,7 +314,7 @@ export async function listMovimientos(req, res) {
     const ids = [...new Set(movimientos.map(m => m.producto_id))]
     const { data: productos, error: errorProductos } = await supabaseAdmin
       .from('producto')
-      .select('id, codigo, nombre')
+      .select('id, codigo, nombre, costo_unitario, precio_compra, stock, unidad')
       .in('id', ids)
 
     if (errorProductos) {
@@ -328,25 +353,27 @@ export async function listMovimientos(req, res) {
 
     const documentoMap = new Map()
     await Promise.all((entradas || []).filter((entrada) => entrada.documento_path).map(async (entrada) => {
-      const { data: signedUrlData } = await supabaseAdmin.storage
-        .from('entrada-inventario-documentos')
-        .createSignedUrl(entrada.documento_path, 60 * 60)
-      if (signedUrlData?.signedUrl) documentoMap.set(entrada.numero_factura, signedUrlData.signedUrl)
+      const url = await getCachedSignedUrl(entrada.documento_path)
+      if (url) documentoMap.set(entrada.numero_factura, url)
     }))
     await Promise.all((movimientos || []).filter((movimiento) => movimiento.documento_path).map(async (movimiento) => {
-      const { data: signedUrlData } = await supabaseAdmin.storage
-        .from('entrada-inventario-documentos')
-        .createSignedUrl(movimiento.documento_path, 60 * 60)
-      if (signedUrlData?.signedUrl) documentoMap.set(movimiento.id, signedUrlData.signedUrl)
+      const url = await getCachedSignedUrl(movimiento.documento_path)
+      if (url) documentoMap.set(movimiento.id, url)
     }))
 
     const dataWithProductos = movimientos.map(m => {
+      const prod = productoMap.get(m.producto_id) || null
       const numeroFactura = m.motivo?.match(/^Factura\s+(.+?)(?:\s+-\s+|$)/)?.[1]?.trim()
-      const costoUnitario = Number(m.costo_unitario_movimiento ?? 0)
+      const fallbackCosto = Number(prod?.costo_unitario ?? prod?.precio_compra ?? 0)
+      const rawCosto = Number(m.costo_unitario_movimiento ?? 0)
+      const costoUnitario = rawCosto > 0 ? rawCosto : fallbackCosto
       const cantidad = Math.abs(Number(m.cantidad ?? 0))
       return {
         ...m,
-        producto: productoMap.get(m.producto_id) || null,
+        costo_unitario_movimiento: costoUnitario,
+        costo_unitario: costoUnitario,
+        costoUnitario,
+        producto: prod,
         proveedor: proveedorMap.get(m.proveedor_id) || null,
         perdida_economica: m.tipo === 'Merma'
           ? Number((cantidad * costoUnitario).toFixed(2))
@@ -422,6 +449,25 @@ export async function createProveedor(req, res) {
     }
 
     try {
+      if (!payload.codigo) {
+        const { data: lastProv } = await supabaseAdmin
+          .from('proveedor')
+          .select('codigo')
+          .ilike('codigo', 'PRV-%')
+          .order('id', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        let nextNum = 1
+        if (lastProv?.codigo) {
+          const match = lastProv.codigo.match(/\d+/)
+          if (match) {
+            nextNum = parseInt(match[0], 10) + 1
+          }
+        }
+        payload.codigo = `PRV-${String(nextNum).padStart(3, '0')}`
+      }
+
       const { data, error } = await supabaseAdmin
         .from('proveedor')
         .insert(payload)
@@ -583,10 +629,19 @@ export async function createMovimiento(req, res) {
 export async function createEntradaInventario(req, res) {
   const body = req.body || {}
   const detalles = Array.isArray(body.detalles) ? body.detalles : []
-  const proveedorId = Number(body.proveedorId ?? body.proveedor_id)
-  const numeroFactura = String(body.numeroFactura ?? body.numero_factura ?? '').trim()
-  if (!Number.isInteger(proveedorId) || !numeroFactura || detalles.length === 0) {
-    return res.status(400).json({ message: 'Proveedor, numero de factura y al menos un producto son obligatorios.' })
+  const proveedorId = (body.proveedorId || body.proveedor_id) ? Number(body.proveedorId ?? body.proveedor_id) : null
+  let numeroFactura = String(body.numeroFactura ?? body.numero_factura ?? '').trim()
+  if (numeroFactura) {
+    const digitsOnly = numeroFactura.replace(/\D/g, '')
+    if (digitsOnly) {
+      numeroFactura = `Fac-${digitsOnly}`
+    }
+  }
+  if (!numeroFactura || detalles.length === 0) {
+    return res.status(400).json({ message: 'El número de factura y al menos un producto son obligatorios.' })
+  }
+  if (proveedorId !== null && !Number.isInteger(proveedorId)) {
+    return res.status(400).json({ message: 'El proveedor seleccionado no es válido.' })
   }
   const normalizedDetalles = detalles.map((detalle) => ({
     producto_id: Number(detalle.productoId ?? detalle.producto_id),
@@ -600,8 +655,10 @@ export async function createEntradaInventario(req, res) {
     return res.status(400).json({ message: 'Revisa los productos, cantidades y costos de la entrada.' })
   }
   try {
-    const responsable = req.auth?.profile?.nombre || req.auth?.user?.email || 'Sistema'
-    const { data, error } = await supabaseAdmin.rpc('registrar_entrada_inventario', {
+    const responsable = String(body.responsable || req.auth?.profile?.nombre || req.auth?.user?.email || 'Sistema').trim()
+    const isConfirmar = body.estado === 'Confirmada' || body.confirmar === true
+
+    let { data, error } = await supabaseAdmin.rpc('registrar_entrada_inventario', {
       p_proveedor_id: proveedorId,
       p_numero_factura: numeroFactura,
       p_fecha: body.fecha || null,
@@ -610,8 +667,100 @@ export async function createEntradaInventario(req, res) {
       p_observaciones: body.observaciones || null,
       p_documento_path: body.documentoPath || body.documento_path || null,
       p_detalles: normalizedDetalles,
-      p_confirmar: body.estado === 'Confirmada' || body.confirmar === true,
+      p_confirmar: isConfirmar,
     })
+
+    if (!error && data) {
+      return res.status(201).json({ data: Array.isArray(data) ? data[0] : data })
+    }
+
+    // Fallback directo si la RPC no está en el schema cache (PGRST202)
+    if (error && error.code === 'PGRST202') {
+      const fechaEntrada = body.fecha || new Date().toISOString().slice(0, 10)
+      const subtotalCalc = normalizedDetalles.reduce((acc, d) => acc + (d.cantidad * d.costo_unitario), 0)
+
+      // Generar correlativo ENT-XXXXX si la tabla requiere numero
+      const { count } = await supabaseAdmin.from('entrada_inventario').select('*', { count: 'exact', head: true })
+      const numeroCorrelativo = `ENT-${String((count || 0) + 1).padStart(5, '0')}`
+
+      const { data: entrada, error: entErr } = await supabaseAdmin
+        .from('entrada_inventario')
+        .insert({
+          numero: numeroCorrelativo,
+          fecha: fechaEntrada,
+          tipo: 'Compra',
+          proveedor_id: proveedorId,
+          numero_factura: numeroFactura,
+          fecha_factura: body.fechaFactura || body.fecha_factura || null,
+          responsable,
+          observaciones: body.observaciones || null,
+          documento_path: body.documentoPath || body.documento_path || null,
+          estado: isConfirmar ? 'Confirmada' : 'Borrador',
+          subtotal: subtotalCalc,
+          total: subtotalCalc,
+        })
+        .select()
+        .single()
+
+      if (entErr || !entrada) {
+        return buildErrorResponse(res, entErr, 'No fue posible crear la entrada.', 400)
+      }
+
+      // Insertar detalles
+      const detallesToInsert = normalizedDetalles.map(d => ({
+        entrada_id: entrada.id,
+        producto_id: d.producto_id,
+        unidad: d.unidad,
+        cantidad: d.cantidad,
+        costo_unitario: d.costo_unitario,
+        total_linea: d.cantidad * d.costo_unitario,
+      }))
+
+      await supabaseAdmin.from('entrada_inventario_detalle').insert(detallesToInsert)
+
+      // Si se confirma, actualizar stock y registrar movimientos
+      if (isConfirmar) {
+        for (const d of normalizedDetalles) {
+          const { data: prod } = await supabaseAdmin
+            .from('producto')
+            .select('id, stock')
+            .eq('id', d.producto_id)
+            .single()
+
+          const stockAntes = prod ? (Number(prod.stock) || 0) : 0
+          const stockDespues = stockAntes + Number(d.cantidad)
+
+          if (prod) {
+            await supabaseAdmin
+              .from('producto')
+              .update({
+                stock: stockDespues,
+                costo_unitario: Number(d.costo_unitario),
+                precio_compra: Number(d.costo_unitario),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', d.producto_id)
+          }
+
+          await supabaseAdmin
+            .from('movimiento_inventario')
+            .insert({
+              producto_id: d.producto_id,
+              proveedor_id: proveedorId,
+              tipo: 'Entrada',
+              cantidad: Number(d.cantidad),
+              motivo: `Factura ${numeroFactura}${body.observaciones ? ' - ' + body.observaciones : ''}`,
+              usuario: responsable,
+              costo_unitario_movimiento: Number(d.costo_unitario),
+              stock_antes: stockAntes,
+              stock_despues: stockDespues,
+            })
+        }
+      }
+
+      return res.status(201).json({ data: entrada })
+    }
+
     if (error || !data) return buildErrorResponse(res, error, 'No fue posible guardar la entrada.', 400)
     return res.status(201).json({ data: Array.isArray(data) ? data[0] : data })
   } catch (error) {
@@ -640,7 +789,7 @@ export async function uploadEntradaInventarioDocumento(req, res) {
     const path = `${new Date().getFullYear()}/entrada-${Date.now()}-${crypto.randomUUID()}.${normalizedExtension}`
     const { error } = await supabaseAdmin.storage
       .from(ENTRADA_DOCUMENTOS_BUCKET)
-      .upload(path, buffer, { upsert: false, contentType: tipo })
+      .upload(path, buffer, { upsert: false, contentType: tipo, cacheControl: '31536000, private, immutable' })
     if (error) return buildErrorResponse(res, error, 'No fue posible cargar el documento.', 400)
     return res.status(201).json({ data: { path } })
   } catch (error) {

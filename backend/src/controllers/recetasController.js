@@ -106,6 +106,7 @@ async function processRecetaImage(rawImg, codigo = 'receta') {
         .from(RECETAS_STORAGE_BUCKET)
         .upload(fileName, buffer, {
           contentType: mime,
+          cacheControl: '31536000, public, immutable',
           upsert: true,
         })
 

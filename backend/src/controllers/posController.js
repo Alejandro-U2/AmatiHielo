@@ -158,9 +158,57 @@ export async function updateCliente(req, res) {
   }
 }
 
-export async function listVentas(req, res) {
+export async function getDashboardMetrics(req, res) {
   try {
-    let query = supabaseAdmin
+    const hoy = new Date()
+    const localTodayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(hoy)
+    const desde = `${localTodayStr}T00:00:00-06:00`
+
+    // 1. Ventas de hoy: solo id y total
+    const { data: ventasHoy, error: errVentas } = await supabaseAdmin
+      .from('venta_pos')
+      .select('id, total')
+      .gte('created_at', desde)
+
+    if (errVentas) return buildErrorResponse(res, errVentas, 'Error cargando métricas de ventas')
+
+    const totalVentasHoy = (ventasHoy || []).reduce((sum, v) => sum + (Number(v.total) || 0), 0)
+    const transaccionesHoy = ventasHoy ? ventasHoy.length : 0
+
+    // 2. Stock total: solo columna stock
+    const { data: productos, error: errProd } = await supabaseAdmin
+      .from('producto')
+      .select('stock')
+
+    if (errProd) return buildErrorResponse(res, errProd, 'Error cargando métricas de inventario')
+    const stockTotal = (productos || []).reduce((sum, p) => sum + (Number(p.stock) || 0), 0)
+
+    // 3. Conteo de recetas (head: true transfiere 0 filas)
+    const { count: recetasCount } = await supabaseAdmin
+      .from('receta')
+      .select('id', { count: 'exact', head: true })
+
+    return res.json({
+      data: {
+        ventasHoy: totalVentasHoy,
+        transaccionesHoy,
+        stockTotal,
+        recetasTotal: recetasCount || 0,
+      }
+    })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible obtener las métricas del dashboard.')
+  }
+}
+
+export async function getVentaById(req, res) {
+  try {
+    const id = Number(req.params.id)
+    if (!id) {
+      return res.status(400).json({ message: 'ID de venta inválido' })
+    }
+
+    const { data, error } = await supabaseAdmin
       .from('venta_pos')
       .select(`
         id,
@@ -191,6 +239,72 @@ export async function listVentas(req, res) {
           )
         )
       `)
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error || !data) {
+      return buildErrorResponse(res, error, 'Venta no encontrada', 404)
+    }
+
+    return res.json({ data: normalizeVenta(data) })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible obtener el detalle de la venta.')
+  }
+}
+
+export async function listVentas(req, res) {
+  try {
+    const includeDetalles = req.query.includeDetalles === 'true'
+    const selectProjection = includeDetalles
+      ? `
+        id,
+        ticket,
+        cliente,
+        metodo_pago,
+        subtotal,
+        iva,
+        total,
+        usuario,
+        necesita_factura,
+        cliente_id,
+        nit,
+        nombre_cliente,
+        numero_telefono,
+        created_at,
+        venta_pos_detalle (
+          id,
+          receta_id,
+          cantidad,
+          precio_unitario,
+          total,
+          receta (
+            id,
+            codigo,
+            nombre,
+            presentacion
+          )
+        )
+      `
+      : `
+        id,
+        ticket,
+        cliente,
+        metodo_pago,
+        subtotal,
+        iva,
+        total,
+        usuario,
+        necesita_factura,
+        cliente_id,
+        nit,
+        nombre_cliente,
+        numero_telefono,
+        created_at
+      `
+
+    let query = supabaseAdmin
+      .from('venta_pos')
+      .select(selectProjection)
       .order('created_at', { ascending: false })
 
     const desde = typeof req.query.desde === 'string' ? req.query.desde.trim() : ''

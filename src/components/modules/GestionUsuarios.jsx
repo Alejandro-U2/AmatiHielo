@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  CheckCircle,
   CheckCircle2,
   Clock3,
   Eye,
   FileDown,
+  Globe,
+  KeyRound,
+  Lock,
   Mail,
   MapPin,
   Pencil,
   Plus,
   RefreshCw,
   Search,
+  Shield,
   ShieldCheck,
   Trash2,
   UserCheck,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -281,10 +287,24 @@ function GestionUsuarios({ currentUserId }) {
   }
 
   const handleFormField = (field, value) => {
+    let cleanVal = value
+    // Restricción: nombres y apellidos no permiten números
+    if (['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido'].includes(field)) {
+      cleanVal = value.replace(/[0-9]/g, '')
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: cleanVal,
     }))
+
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next[field]
+        return next
+      })
+    }
 
     if (field === 'departamentoId') {
       setFormData((prev) => ({
@@ -305,23 +325,35 @@ function GestionUsuarios({ currentUserId }) {
     // Primer nombre y segundo nombre
     if (!formData.primerNombre.trim()) {
       errors.primerNombre = 'El primer nombre es obligatorio.'
+    } else if (/\d/.test(formData.primerNombre)) {
+      errors.primerNombre = 'No se permiten números en el nombre.'
     } else if (!NAME_REGEX.test(formData.primerNombre.trim())) {
       errors.primerNombre = 'Solo se permiten letras, espacios y acentos.'
     }
 
-    if (formData.segundoNombre.trim() && !NAME_REGEX.test(formData.segundoNombre.trim())) {
-      errors.segundoNombre = 'Solo se permiten letras, espacios y acentos.'
+    if (formData.segundoNombre.trim()) {
+      if (/\d/.test(formData.segundoNombre)) {
+        errors.segundoNombre = 'No se permiten números en el nombre.'
+      } else if (!NAME_REGEX.test(formData.segundoNombre.trim())) {
+        errors.segundoNombre = 'Solo se permiten letras, espacios y acentos.'
+      }
     }
 
     // Primer apellido y segundo apellido
     if (!formData.primerApellido.trim()) {
       errors.primerApellido = 'El primer apellido es obligatorio.'
+    } else if (/\d/.test(formData.primerApellido)) {
+      errors.primerApellido = 'No se permiten números en el apellido.'
     } else if (!NAME_REGEX.test(formData.primerApellido.trim())) {
       errors.primerApellido = 'Solo se permiten letras, espacios y acentos.'
     }
 
-    if (formData.segundoApellido.trim() && !NAME_REGEX.test(formData.segundoApellido.trim())) {
-      errors.segundoApellido = 'Solo se permiten letras, espacios y acentos.'
+    if (formData.segundoApellido.trim()) {
+      if (/\d/.test(formData.segundoApellido)) {
+        errors.segundoApellido = 'No se permiten números en el apellido.'
+      } else if (!NAME_REGEX.test(formData.segundoApellido.trim())) {
+        errors.segundoApellido = 'Solo se permiten letras, espacios y acentos.'
+      }
     }
 
     // Nombre de usuario
@@ -450,12 +482,12 @@ function GestionUsuarios({ currentUserId }) {
     { key: 'segundoApellido', label: 'Segundo apellido', placeholder: 'Ej: López', required: false },
   ]
 
-    const getInputClass = (fieldKey) => {
+  const getInputClass = (fieldKey) => {
     const hasError = Boolean(fieldErrors[fieldKey])
     if (hasError) {
-      return 'w-full px-4 py-2 border-2 border-red-500 bg-red-50/50 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed'
+      return 'w-full px-3.5 py-2.5 text-sm border-2 border-red-500 bg-red-50/50 dark:bg-red-950/30 rounded-xl text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed transition-colors'
     }
-    return 'w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed'
+    return 'w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed transition-colors'
   }
 
   return (
@@ -670,56 +702,89 @@ function GestionUsuarios({ currentUserId }) {
 
       {/* Modal para agregar/editar/desactivar usuario */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-white/70">
-            <div className="p-6 sm:p-7">
-              {/* Header del modal */}
-              <div className="flex items-start justify-between gap-4 mb-7">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-cyan-50 text-cyan-700 flex items-center justify-center">
-                    {modalType === 'view' ? <Eye size={22} aria-hidden="true" /> : <UserRound size={22} aria-hidden="true" />}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-cyan-600">Gestión de usuarios</p>
-                    <h3 className="text-xl font-bold text-gray-800">
-                      {modalType === 'add' && 'Nuevo Usuario'}
-                      {modalType === 'edit' && 'Editar Usuario'}
-                      {modalType === 'view' && 'Detalle del Usuario'}
-                      {modalType === 'delete' && 'Desactivar Usuario'}
-                    </h3>
-                  </div>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col border border-gray-100 dark:border-slate-800 transition-all overflow-hidden">
+            {/* Header del modal */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
+              <div className="flex items-center gap-3.5">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                  modalType === 'add' ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-cyan-500/20' :
+                  modalType === 'edit' ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-blue-500/20' :
+                  modalType === 'view' ? 'bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-slate-500/20' :
+                  'bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-red-500/20'
+                }`}>
+                  {modalType === 'add' && <UserPlus size={22} />}
+                  {modalType === 'edit' && <Pencil size={22} />}
+                  {modalType === 'view' && <Eye size={22} />}
+                  {modalType === 'delete' && <AlertTriangle size={22} />}
                 </div>
-                <button
-                  onClick={handleCloseModal}
-                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                  title="Cerrar"
-                  aria-label="Cerrar modal"
-                >
-                  <X size={22} aria-hidden="true" />
-                </button>
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
+                    {modalType === 'add' && 'Nuevo Usuario'}
+                    {modalType === 'edit' && 'Editar Usuario'}
+                    {modalType === 'view' && 'Detalle del Usuario'}
+                    {modalType === 'delete' && 'Desactivar Usuario'}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {modalType === 'add' && 'Crea credenciales de acceso y asigna rol en el sistema'}
+                    {modalType === 'edit' && 'Modifica datos de perfil, permisos y estado de la cuenta'}
+                    {modalType === 'view' && 'Ficha técnica completa y trazabilidad de accesos'}
+                    {modalType === 'delete' && 'Inhabilitación de credenciales para inicio de sesión'}
+                  </p>
+                </div>
               </div>
+              <button
+                onClick={handleCloseModal}
+                className="rounded-xl p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                title="Cerrar modal"
+                aria-label="Cerrar modal"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
 
-              {/* Contenido del modal */}
+            {/* Contenido del modal */}
+            <div className="p-6 overflow-y-auto max-h-[calc(92vh-85px)] space-y-5">
               {(modalType === 'add' || modalType === 'edit') && (
-                <form className="space-y-4" onSubmit={handleSubmitUser}>
+                <form className="space-y-5" onSubmit={handleSubmitUser} noValidate>
                   {modalError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                      {modalError}
+                    <div className="rounded-xl border border-red-200 bg-red-50/90 dark:bg-red-950/40 dark:border-red-900/60 p-4 text-sm text-red-700 dark:text-red-300 flex items-center gap-3">
+                      <AlertTriangle size={18} className="flex-shrink-0 text-red-600" />
+                      <span>{modalError}</span>
                     </div>
                   )}
 
-                  <div>
-                    <p className="block text-sm font-semibold text-gray-700 mb-2">Nombre completo</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Tarjeta 1: Datos Personales (Nombre Completo) */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <UserRound size={15} className="text-cyan-600" />
+                        Datos Personales
+                      </span>
+                      <span className="text-[11px] text-cyan-700 dark:text-cyan-400 font-semibold bg-cyan-50 dark:bg-cyan-950/60 px-2.5 py-0.5 rounded-full border border-cyan-200 dark:border-cyan-800/60">
+                        Solo letras (sin números)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       {nameFieldsConfig.map((field) => (
                         <div key={field.key}>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
                             {field.label} {field.required && <span className="text-red-500">*</span>}
                           </label>
                           <input
                             type="text"
                             value={formData[field.key]}
-                            onChange={(e) => handleFormField(field.key, e.target.value)}
+                            onKeyDown={(e) => {
+                              // Bloquear números al presionar teclas (0-9 teclado normal o numpad)
+                              if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && /[0-9]/.test(e.key)) {
+                                e.preventDefault()
+                              }
+                            }}
+                            onChange={(e) => {
+                              // Sanitizar en caso de pegar texto con números
+                              const sanitized = e.target.value.replace(/[0-9]/g, '')
+                              handleFormField(field.key, sanitized)
+                            }}
                             placeholder={field.placeholder}
                             disabled={modalType === 'view'}
                             aria-invalid={Boolean(fieldErrors[field.key])}
@@ -735,279 +800,374 @@ function GestionUsuarios({ currentUserId }) {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Nombre de usuario <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.usuario}
-                      onChange={(e) => handleFormField('usuario', e.target.value)}
-                      placeholder="Ej: jperez"
-                      disabled={modalType === 'view'}
-                      aria-invalid={Boolean(fieldErrors.usuario)}
-                      className={getInputClass('usuario')}
-                    />
-                    {fieldErrors.usuario && (
-                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.usuario}</p>
-                    )}
-                  </div>
+                  {/* Tarjeta 2: Credenciales de Acceso */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <KeyRound size={15} className="text-cyan-600" />
+                        Credenciales de Acceso
+                      </span>
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleFormField('email', e.target.value)}
-                      placeholder="usuario@amati.com"
-                      disabled={modalType === 'view'}
-                      aria-invalid={Boolean(fieldErrors.email)}
-                      className={getInputClass('email')}
-                    />
-                    {fieldErrors.email && (
-                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.email}</p>
-                    )}
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Nombre de usuario <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm select-none">
+                            @
+                          </span>
+                          <input
+                            type="text"
+                            value={formData.usuario}
+                            onChange={(e) => handleFormField('usuario', e.target.value)}
+                            placeholder="jperez"
+                            disabled={modalType === 'view'}
+                            aria-invalid={Boolean(fieldErrors.usuario)}
+                            className={`${getInputClass('usuario')} pl-8`}
+                          />
+                        </div>
+                        {fieldErrors.usuario && (
+                          <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.usuario}</p>
+                        )}
+                      </div>
 
-                  {modalType !== 'view' && (
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Correo electrónico <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                            <Mail size={16} />
+                          </span>
+                          <input
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => handleFormField('email', e.target.value)}
+                            placeholder="usuario@amati.com"
+                            disabled={modalType === 'view'}
+                            aria-invalid={Boolean(fieldErrors.email)}
+                            className={`${getInputClass('email')} pl-10`}
+                          />
+                        </div>
+                        {fieldErrors.email && (
+                          <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.email}</p>
+                        )}
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
                         {modalType === 'add' ? (
-                          <>Contraseña <span className="text-red-500">*</span></>
+                          <>Contraseña de Acceso <span className="text-red-500">*</span></>
                         ) : (
-                          'Contraseña nueva (opcional)'
+                          'Nueva Contraseña (Opcional)'
                         )}
                       </label>
-                      <input
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) => handleFormField('password', e.target.value)}
-                        placeholder={modalType === 'add' ? 'Mínimo 6 caracteres' : 'Deja vacío para no cambiar'}
-                        disabled={modalType === 'view'}
-                        aria-invalid={Boolean(fieldErrors.password)}
-                        className={getInputClass('password')}
-                      />
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                          <Lock size={16} />
+                        </span>
+                        <input
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => handleFormField('password', e.target.value)}
+                          placeholder={modalType === 'add' ? 'Mínimo 6 caracteres' : 'Dejar en blanco para conservar la actual'}
+                          disabled={modalType === 'view'}
+                          aria-invalid={Boolean(fieldErrors.password)}
+                          className={`${getInputClass('password')} pl-10`}
+                        />
+                      </div>
                       {fieldErrors.password && (
                         <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.password}</p>
                       )}
                     </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Rol</label>
-                    <select
-                      value={formData.rol}
-                      onChange={(e) => handleFormField('rol', e.target.value)}
-                      disabled={modalType === 'view'}
-                      className={getInputClass('rol')}
-                    >
-                      {roles.map((role) => (
-                        <option key={role.id || role.nombre} value={role.nombre}>
-                          {role.nombre}
-                        </option>
-                      ))}
-                    </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Estado</label>
-                    <select
-                      value={formData.estado}
-                      onChange={(e) => handleFormField('estado', e.target.value)}
-                      disabled={modalType === 'view'}
-                      className={getInputClass('estado')}
-                    >
-                      {estados.map((estado) => (
-                        <option
-                          key={estado.id || estado.nombre}
-                          value={estado.nombre}
-                          disabled={isEditingSelf && estado.nombre === 'Inactivo'}
+                  {/* Tarjeta 3: Rol y Estado en el Sistema */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <ShieldCheck size={15} className="text-cyan-600" />
+                        Rol y Estado de la Cuenta
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Rol en el Sistema <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.rol}
+                          onChange={(e) => handleFormField('rol', e.target.value)}
+                          disabled={modalType === 'view'}
+                          className={getInputClass('rol')}
                         >
-                          {estado.nombre}
-                        </option>
-                      ))}
-                    </select>
-                    {isEditingSelf && (
-                      <p className="mt-1 text-sm text-amber-600">No puedes desactivar tu propio usuario.</p>
-                    )}
-                    {fieldErrors.estado && (
-                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.estado}</p>
-                    )}
+                          {roles.map((role) => (
+                            <option key={role.id || role.nombre} value={role.nombre}>
+                              {role.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Estado del Usuario <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.estado}
+                          onChange={(e) => handleFormField('estado', e.target.value)}
+                          disabled={modalType === 'view'}
+                          className={getInputClass('estado')}
+                        >
+                          {estados.map((estado) => (
+                            <option
+                              key={estado.id || estado.nombre}
+                              value={estado.nombre}
+                              disabled={isEditingSelf && estado.nombre === 'Inactivo'}
+                            >
+                              {estado.nombre}
+                            </option>
+                          ))}
+                        </select>
+                        {isEditingSelf && (
+                          <p className="mt-1 text-xs text-amber-600">No puedes desactivar tu propia cuenta.</p>
+                        )}
+                        {fieldErrors.estado && (
+                          <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.estado}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      País <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value="Guatemala"
-                      disabled
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed focus:outline-none"
-                    >
-                      <option value="Guatemala">Guatemala</option>
-                    </select>
+                  {/* Tarjeta 4: Ubicación Geográfica */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <MapPin size={15} className="text-cyan-600" />
+                        Ubicación Geográfica
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          País <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                            <Globe size={16} />
+                          </span>
+                          <select
+                            value="Guatemala"
+                            disabled
+                            className="w-full pl-10 pr-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 font-semibold cursor-not-allowed focus:outline-none"
+                          >
+                            <option value="Guatemala">Guatemala</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Departamento <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.departamentoId}
+                          onChange={(e) => handleFormField('departamentoId', e.target.value)}
+                          disabled={modalType === 'view'}
+                          aria-invalid={Boolean(fieldErrors.departamentoId)}
+                          className={getInputClass('departamentoId')}
+                        >
+                          <option value="">Selecciona departamento...</option>
+                          {departamentos.map((departamento) => (
+                            <option key={departamento.id} value={departamento.id}>
+                              {departamento.nombre}
+                            </option>
+                          ))}
+                        </select>
+                        {fieldErrors.departamentoId && (
+                          <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.departamentoId}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Municipio <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.municipioId}
+                          onChange={(e) => handleFormField('municipioId', e.target.value)}
+                          disabled={modalType === 'view' || !formData.departamentoId}
+                          aria-invalid={Boolean(fieldErrors.municipioId)}
+                          className={getInputClass('municipioId')}
+                        >
+                          <option value="">
+                            {formData.departamentoId ? 'Selecciona municipio...' : 'Primero el departamento'}
+                          </option>
+                          {municipios.map((municipio) => (
+                            <option key={municipio.id} value={municipio.id}>
+                              {municipio.nombre}
+                            </option>
+                          ))}
+                        </select>
+                        {fieldErrors.municipioId && (
+                          <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.municipioId}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Departamento <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.departamentoId}
-                      onChange={(e) => handleFormField('departamentoId', e.target.value)}
-                      disabled={modalType === 'view'}
-                      aria-invalid={Boolean(fieldErrors.departamentoId)}
-                      className={getInputClass('departamentoId')}
-                    >
-                      <option value="">Selecciona un departamento</option>
-                      {departamentos.map((departamento) => (
-                        <option key={departamento.id} value={departamento.id}>
-                          {departamento.nombre}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldErrors.departamentoId && (
-                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.departamentoId}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Municipio <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.municipioId}
-                      onChange={(e) => handleFormField('municipioId', e.target.value)}
-                      disabled={modalType === 'view' || !formData.departamentoId}
-                      aria-invalid={Boolean(fieldErrors.municipioId)}
-                      className={getInputClass('municipioId')}
-                    >
-                      <option value="">
-                        {formData.departamentoId ? 'Selecciona un municipio' : 'Primero selecciona el departamento'}
-                      </option>
-                      {municipios.map((municipio) => (
-                        <option key={municipio.id} value={municipio.id}>
-                          {municipio.nombre}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldErrors.municipioId && (
-                      <p className="mt-1 text-xs text-red-600 font-medium">{fieldErrors.municipioId}</p>
-                    )}
-                  </div>
-
-                  <div className="flex space-x-3 pt-4">
+                  {/* Botones de Acción */}
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
                     <button
                       type="button"
                       disabled={isSaving}
                       onClick={handleCloseModal}
-                      className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                     >
                       Cancelar
                     </button>
-                    {modalType === 'view' ? (
-                      <button
-                        type="button"
-                        onClick={handleCloseModal}
-                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
-                      >
-                        Cerrar
-                      </button>
-                    ) : (
-                      <button
-                        type="submit"
-                        disabled={isSaving}
-                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
-                      >
-                        {isSaving ? 'Guardando...' : modalType === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}
-                      </button>
-                    )}
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          <span>Guardando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          <span>{modalType === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </form>
               )}
 
               {modalType === 'view' && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4 rounded-xl bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-100 p-4">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center text-xl font-bold">
+                <div className="space-y-5">
+                  {/* Avatar y encabezado de perfil */}
+                  <div className="flex items-center gap-4 rounded-xl bg-gradient-to-r from-cyan-50/80 via-blue-50/50 to-slate-50/70 dark:from-cyan-950/30 dark:via-blue-950/20 dark:to-slate-900/40 border border-cyan-100 dark:border-cyan-900/50 p-4">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center text-2xl font-black shadow-md flex-shrink-0">
                       {(selectedUser?.nombre || 'U').charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-lg font-bold text-gray-800 truncate">{selectedUser?.nombre || 'Sin registro'}</p>
-                      <p className="text-sm text-gray-600">@{selectedUser?.usuario || 'sin-usuario'}</p>
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
+                        {selectedUser?.nombre || 'Sin nombre registrado'}
+                      </h4>
+                      <p className="text-xs text-cyan-700 dark:text-cyan-400 font-semibold mt-0.5">
+                        @{selectedUser?.usuario || 'sin-usuario'}
+                      </p>
                     </div>
                   </div>
 
+                  {/* Badges de Rol y Estado */}
                   <div className="flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
-                      <ShieldCheck size={14} aria-hidden="true" />
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800/60 px-3 py-1 text-xs font-bold text-cyan-800 dark:text-cyan-300">
+                      <ShieldCheck size={14} />
                       {selectedUser?.rol || 'Sin rol'}
                     </span>
-                    <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${selectedUser?.estado === 'Activo' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
+                      selectedUser?.estado === 'Activo'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${selectedUser?.estado === 'Activo' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                       {selectedUser?.estado || 'Sin estado'}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-gray-200 bg-white p-4">
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <Mail size={16} aria-hidden="true" />
-                        <p className="text-xs font-semibold uppercase tracking-wide">Email</p>
+                  {/* Cuadrantes de Información */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
+                        <Mail size={16} className="text-cyan-600" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Correo Electrónico</span>
                       </div>
-                      <p className="mt-2 text-sm font-medium text-gray-800 break-words">{selectedUser?.email || 'Sin registro'}</p>
+                      <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-gray-200 break-words">
+                        {selectedUser?.email || 'Sin registro'}
+                      </p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-white p-4">
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <MapPin size={16} aria-hidden="true" />
-                        <p className="text-xs font-semibold uppercase tracking-wide">Ubicación</p>
+
+                    <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
+                        <MapPin size={16} className="text-cyan-600" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Ubicación Geográfica</span>
                       </div>
-                      <p className="mt-2 text-sm font-medium text-gray-800">{selectedUser?.municipio || 'Sin municipio'}</p>
-                      <p className="text-xs text-gray-500">{selectedUser?.departamento || 'Sin departamento'}</p>
+                      <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        {selectedUser?.municipio || 'Sin municipio'}, {selectedUser?.departamento || 'Sin departamento'}
+                      </p>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Guatemala</p>
                     </div>
-                    <div className="sm:col-span-2 rounded-xl border border-gray-200 bg-white p-4">
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <Clock3 size={16} aria-hidden="true" />
-                        <p className="text-xs font-semibold uppercase tracking-wide">Último acceso</p>
+
+                    <div className="sm:col-span-2 rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm">
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
+                        <Clock3 size={16} className="text-cyan-600" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Última Actividad / Acceso</span>
                       </div>
-                      <p className="mt-2 text-sm font-medium text-gray-800">{selectedUser?.ultimoAcceso || 'Sin registro'}</p>
+                      <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        {selectedUser?.ultimoAcceso || 'Sin registro de actividad reciente'}
+                      </p>
                     </div>
                   </div>
-                  <div className="pt-4">
+
+                  <div className="pt-2">
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition-colors shadow-md font-semibold"
+                      className="w-full rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 py-3 font-semibold text-gray-700 dark:text-gray-200 transition-colors shadow-sm"
                     >
-                      Cerrar
+                      Cerrar Ficha
                     </button>
                   </div>
                 </div>
               )}
 
               {modalType === 'delete' && (
-                <div>
+                <div className="space-y-5">
                   {modalError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
-                      {modalError}
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-3">
+                      <AlertTriangle size={18} className="flex-shrink-0 text-red-600" />
+                      <span>{modalError}</span>
                     </div>
                   )}
-                  <div className="bg-red-50 rounded-lg p-4 mb-6">
-                    <p className="text-gray-700 mb-2">¿Estás seguro de que deseas desactivar al usuario?</p>
-                    <p className="font-bold text-gray-800">{selectedUser?.nombre}</p>
-                    <p className="text-sm text-gray-600">@{selectedUser?.usuario}</p>
+
+                  {/* Banner de confirmación destructiva */}
+                  <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/30 text-rose-900 dark:text-rose-200 flex items-start gap-3.5">
+                    <AlertTriangle size={22} className="text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-bold">¿Desactivar acceso de este colaborador?</h4>
+                      <p className="text-xs text-rose-800/80 dark:text-rose-300/80 mt-1">
+                        El usuario conservará todo su historial y trazabilidad en el sistema, pero ya no podrá iniciar sesión.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-red-600 mb-6 flex items-center gap-2">
-                    <AlertTriangle size={16} aria-hidden="true" />
-                    El usuario conservará su historial, pero ya no podrá iniciar sesión.
-                  </p>
-                  <div className="flex space-x-3">
+
+                  {/* Ficha rápida del usuario */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/50 p-4 shadow-sm flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                      {(selectedUser?.nombre || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-900 dark:text-gray-100">{selectedUser?.nombre}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">@{selectedUser?.usuario} · {selectedUser?.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-3 border-t border-gray-100 dark:border-slate-800">
                     <button
                       type="button"
                       disabled={isSaving}
                       onClick={handleCloseModal}
-                      className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                     >
                       Cancelar
                     </button>
@@ -1015,9 +1175,19 @@ function GestionUsuarios({ currentUserId }) {
                       type="button"
                       disabled={isSaving}
                       onClick={handleDeleteUser}
-                      className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white py-3 rounded-lg hover:from-red-600 hover:to-red-700 transition-all shadow-md font-medium"
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
                     >
-                      {isSaving ? 'Desactivando...' : 'Desactivar Usuario'}
+                      {isSaving ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          <span>Desactivando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle size={16} />
+                          <span>Confirmar Desactivación</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

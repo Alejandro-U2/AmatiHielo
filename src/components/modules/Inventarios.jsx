@@ -2,16 +2,27 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownToLine,
+  ArrowRight,
+  ArrowUpRight,
   Bell,
+  Building2,
+  Calendar,
   CheckCircle,
+  Clock,
   Eye,
   FileDown,
+  FileText,
   Package,
+  PackageMinus,
+  PackagePlus,
   Pencil,
   Plus,
+  Receipt,
   RefreshCw,
   Trash2,
   TriangleAlert,
+  Upload,
+  User,
   X,
   ClipboardList,
   ClipboardCheck,
@@ -40,6 +51,7 @@ import SortableHeader from '../../components/SortableHeader'
 import ReporteModal from '../../components/ReporteModal'
 import SuccessModal from '../SuccessModal'
 import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
+import { getCurrentUser } from '../../services/authService'
 import { generarReporteModulo } from '../../utils/moduloExport'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
 import { toast } from 'sonner'
@@ -96,6 +108,8 @@ function Inventarios() {
     fecha: new Date().toISOString().slice(0, 10),
     proveedorId: '',
     numeroFactura: '',
+    numeroFacturaOnlyDigits: '',
+    responsable: '',
     fechaFactura: '',
     observaciones: '',
     documento: null,
@@ -305,10 +319,16 @@ function Inventarios() {
   }
 
   const resetEntradaForm = (item = null) => {
+    const currentUser = getCurrentUser()
+    const nombreResponsable = currentUser?.nombre || currentUser?.username || 'Usuario actual'
+    const rawDigits = String(item?.numero_factura || item?.numeroFactura || '').replace(/\D/g, '')
+
     setEntradaForm({
       fecha: new Date().toISOString().slice(0, 10),
       proveedorId: '',
-      numeroFactura: '',
+      numeroFactura: rawDigits ? `Fac-${rawDigits}` : '',
+      numeroFacturaOnlyDigits: rawDigits,
+      responsable: nombreResponsable,
       fechaFactura: '',
       observaciones: '',
       documento: null,
@@ -385,6 +405,40 @@ function Inventarios() {
     modalType === 'merma' && !Number.isNaN(cantidadMerma)
       ? cantidadMerma * costoUnitarioMerma
       : 0
+
+  const modalMaxWidth =
+    modalType === 'entrada' ? 'max-w-4xl' :
+    modalType === 'merma' ? 'max-w-2xl' :
+    modalType === 'movement-view' ? 'max-w-2xl' :
+    modalType === 'provider-add' || modalType === 'provider-edit' ? 'max-w-xl' :
+    'max-w-2xl'
+
+  const productoAsociado = useMemo(() => {
+    if (!selectedItem) return null
+    return (
+      productos.find(
+        (p) =>
+          String(p.id) === String(selectedItem.productoId ?? selectedItem.producto_id) ||
+          p.nombre === selectedItem.producto
+      ) || null
+    )
+  }, [selectedItem, productos])
+
+  const costoUnitarioEfectivo = useMemo(() => {
+    if (!selectedItem) return 0
+    const raw = Number(
+      selectedItem.costoUnitario ??
+      selectedItem.costo_unitario_movimiento ??
+      selectedItem.costo_unitario ??
+      0
+    )
+    if (raw > 0) return raw
+    return Number(
+      productoAsociado?.costo_unitario ??
+      productoAsociado?.precio_compra ??
+      0
+    )
+  }, [selectedItem, productoAsociado])
 
   const getCategoriaColor = (categoria) => {
     switch(categoria) {
@@ -519,11 +573,41 @@ function Inventarios() {
     setMermaForm({ fecha: new Date().toISOString().slice(0, 10), motivoTipo: '', evidencia: null })
   }
 
+const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
+  if (value === '' || value === null || value === undefined) return ''
+  const str = String(value)
+  const clean = str.replace(/[^0-9.]/g, '')
+  const parts = clean.split('.')
+  const integerPart = parts[0].slice(0, maxIntegerDigits)
+  if (parts.length > 1) {
+    const decimalPart = parts.slice(1).join('').slice(0, maxDecimalDigits)
+    return `${integerPart}.${decimalPart}`
+  }
+  return integerPart
+}
+
   const handleProductoFormChange = (field, value) => {
     const updated = { ...productoForm, [field]: value }
 
     if (field === 'nombre') {
-      updated.nombre = capitalizeWords(sanitizeSoloLetras(value))
+      // Permitir letras, números, espacios y caracteres comunes en nombres de insumos/productos
+      let clean = value.replace(/[^A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü\s\.\-\/()#\,]/g, '')
+      if (clean.startsWith(' ')) {
+        clean = clean.trimStart()
+      }
+      updated.nombre = clean.slice(0, 100)
+    }
+
+    if (field === 'cantidadCompra') {
+      updated.cantidadCompra = limitDigits(value, 6, 2)
+    }
+
+    if (field === 'precioPaquete') {
+      updated.precioPaquete = limitDigits(value, 6, 2)
+    }
+
+    if (field === 'minimo') {
+      updated.minimo = limitDigits(value, 6, 2)
     }
 
     if (field === 'cantidadCompra' || field === 'precioPaquete') {
@@ -565,7 +649,7 @@ function Inventarios() {
 
       const payload = {
         codigo,
-        nombre: capitalizeWords(sanitizeSoloLetras(productoForm.nombre)),
+        nombre: productoForm.nombre.trim().replace(/\s+/g, ' '),
         categoria: productoForm.categoria,
         minimo: productoForm.minimo === '' ? null : Number(productoForm.minimo),
         cantidadCompra: productoForm.cantidadCompra === '' ? null : Number(productoForm.cantidadCompra),
@@ -620,14 +704,33 @@ function Inventarios() {
     setErrorProducto('')
     setIsSavingMovimiento(true)
     try {
-      if (!entradaForm.proveedorId || !entradaForm.numeroFactura.trim()) throw new Error('Proveedor y número de factura son obligatorios.')
-      if (entradaForm.detalles.some((detalle) => !detalle.productoId || Number(detalle.cantidad) <= 0 || Number(detalle.costoUnitario) < 0)) throw new Error('Completa producto, cantidad y costo de cada fila.')
+      const rawDigits = String(entradaForm.numeroFacturaOnlyDigits || entradaForm.numeroFactura || '').replace(/\D/g, '')
+      if (!rawDigits) {
+        throw new Error('El número de factura es obligatorio (ingresa solo números).')
+      }
+      if (entradaForm.detalles.some((detalle) => !detalle.productoId || Number(detalle.cantidad) <= 0 || Number(detalle.costoUnitario) < 0)) {
+        throw new Error('Completa producto, cantidad y costo de cada fila.')
+      }
+      const formattedFactura = `Fac-${rawDigits}`
+      const currentUser = getCurrentUser()
+      const responsableFinal = entradaForm.responsable || currentUser?.nombre || currentUser?.username || 'Usuario actual'
+
       const documentoPath = await uploadEntradaInventarioDocumento(entradaForm.documento)
       await createEntradaInventario({
-        fecha: entradaForm.fecha, proveedorId: Number(entradaForm.proveedorId), numeroFactura: entradaForm.numeroFactura,
-        fechaFactura: entradaForm.fechaFactura || null, observaciones: entradaForm.observaciones, documentoPath,
+        fecha: entradaForm.fecha,
+        proveedorId: entradaForm.proveedorId ? Number(entradaForm.proveedorId) : null,
+        numeroFactura: formattedFactura,
+        responsable: responsableFinal,
+        fechaFactura: entradaForm.fechaFactura || null,
+        observaciones: entradaForm.observaciones,
+        documentoPath,
         estado: confirmar ? 'Confirmada' : 'Borrador',
-        detalles: entradaForm.detalles.map((detalle) => ({ productoId: Number(detalle.productoId), unidad: detalle.unidad, cantidad: Number(detalle.cantidad), costoUnitario: Number(detalle.costoUnitario) })),
+        detalles: entradaForm.detalles.map((detalle) => ({
+          productoId: Number(detalle.productoId),
+          unidad: detalle.unidad,
+          cantidad: Number(detalle.cantidad),
+          costoUnitario: Number(detalle.costoUnitario),
+        })),
       })
       if (confirmar) await Promise.all([loadProductos(), loadMovimientos()])
       handleCloseModal()
@@ -1341,225 +1444,491 @@ function Inventarios() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-gray-800">
-                  {modalType === 'add' && 'Nuevo Artículo'}
-                  {modalType === 'edit' && 'Editar Artículo'}
-                  {modalType === 'view' && 'Ver Artículo'}
-                  {modalType === 'entrada' && 'Registro de Entrada'}
-                  {modalType === 'merma' && 'Gestión de Mermas'}
-                  {modalType === 'movement-view' && `Detalle de ${selectedItem?.tipo || 'Movimiento'}`}
-                  {modalType === 'provider-add' && 'Nuevo Proveedor'}
-                  {modalType === 'provider-edit' && 'Editar Proveedor'}
-                </h3>
-                <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600" title="Cerrar" aria-label="Cerrar">
-                  <X size={22} aria-hidden="true" />
-                </button>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className={`bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ${modalMaxWidth} w-full max-h-[92vh] flex flex-col border border-gray-100 dark:border-slate-800 transition-all overflow-hidden`}>
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
+              <div className="flex items-center gap-3.5">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                  modalType === 'entrada' ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-cyan-500/20' :
+                  modalType === 'merma' ? 'bg-gradient-to-br from-amber-500 to-rose-600 text-white shadow-amber-500/20' :
+                  modalType === 'movement-view' && selectedItem?.tipo === 'Merma' ? 'bg-gradient-to-br from-amber-500 to-rose-600 text-white shadow-amber-500/20' :
+                  modalType === 'movement-view' && selectedItem?.tipo === 'Entrada' ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-cyan-500/20' :
+                  modalType === 'movement-view' ? 'bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-slate-500/20' :
+                  modalType === 'add' ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white' :
+                  modalType === 'edit' ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' :
+                  modalType === 'view' ? 'bg-gradient-to-br from-slate-500 to-slate-700 text-white' :
+                  'bg-gradient-to-br from-cyan-500 to-blue-600 text-white'
+                }`}>
+                  {modalType === 'entrada' && <PackagePlus size={22} />}
+                  {modalType === 'merma' && <PackageMinus size={22} />}
+                  {modalType === 'movement-view' && (
+                    selectedItem?.tipo === 'Merma' ? <TriangleAlert size={22} /> :
+                    selectedItem?.tipo === 'Entrada' ? <ArrowDownToLine size={22} /> :
+                    <Eye size={22} />
+                  )}
+                  {modalType === 'add' && <Plus size={22} />}
+                  {modalType === 'edit' && <Pencil size={22} />}
+                  {modalType === 'view' && <Eye size={22} />}
+                  {modalType === 'provider-add' && <Building2 size={22} />}
+                  {modalType === 'provider-edit' && <Building2 size={22} />}
+                </div>
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
+                    {modalType === 'add' && 'Nuevo Artículo'}
+                    {modalType === 'edit' && 'Editar Artículo'}
+                    {modalType === 'view' && 'Ver Artículo'}
+                    {modalType === 'entrada' && 'Registro de Entrada'}
+                    {modalType === 'merma' && 'Registro de Merma'}
+                    {modalType === 'movement-view' && `Detalle de ${selectedItem?.tipo || 'Movimiento'}`}
+                    {modalType === 'provider-add' && 'Nuevo Proveedor'}
+                    {modalType === 'provider-edit' && 'Editar Proveedor'}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {modalType === 'entrada' && 'Ingreso de compras con actualización inmediata de existencias'}
+                    {modalType === 'merma' && 'Baja definitiva de inventario y cálculo de impacto financiero'}
+                    {modalType === 'movement-view' && 'Auditoría, trazabilidad y comprobantes de la operación'}
+                    {modalType === 'add' && 'Ingresa los datos del nuevo producto o insumo'}
+                    {modalType === 'edit' && 'Modifica los parámetros y límites del producto'}
+                    {modalType === 'view' && 'Ficha informativa y parámetros del producto'}
+                  </p>
+                </div>
               </div>
+              <button
+                onClick={handleCloseModal}
+                className="rounded-xl p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                title="Cerrar modal"
+                aria-label="Cerrar modal"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
 
+            <div className="p-6 overflow-y-auto max-h-[calc(92vh-85px)] space-y-6">
               {modalType === 'movement-view' && selectedItem && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Fecha</span><p className="mt-1 text-gray-800">{selectedItem.fecha}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Tipo</span><p className="mt-1 font-semibold text-gray-800">{selectedItem.tipo}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Producto</span><p className="mt-1 text-gray-800">{selectedItem.producto}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Cantidad</span><p className="mt-1 font-semibold text-gray-800">{selectedItem.cantidad}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Proveedor</span><p className="mt-1 text-gray-800">{selectedItem.proveedor || 'No aplica'}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Usuario</span><p className="mt-1 text-gray-800">{selectedItem.usuario}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Costo unitario</span><p className="mt-1 text-gray-800">Q{(Number(selectedItem.costoUnitario) || 0).toFixed(2)}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Pérdida económica</span><p className="mt-1 font-semibold text-orange-600">Q{(Number(selectedItem.perdidaEconomica) || 0).toFixed(2)}</p></div>
-                      <div><span className="text-xs font-semibold uppercase text-gray-500">Stock</span><p className="mt-1 text-gray-800">{selectedItem.stockAntes ?? '—'} → {selectedItem.stockDespues ?? '—'}</p></div>
+                <div className="space-y-5">
+                  {/* Banner superior con Tipo, Fecha y Responsable */}
+                  <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                    selectedItem.tipo === 'Entrada'
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-200'
+                      : selectedItem.tipo === 'Merma'
+                      ? 'bg-amber-50/70 border-amber-200 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-200'
+                      : 'bg-blue-50/70 border-blue-200 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800/60 dark:text-blue-200'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        selectedItem.tipo === 'Entrada'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : selectedItem.tipo === 'Merma'
+                          ? 'bg-rose-600 text-white shadow-sm'
+                          : 'bg-blue-600 text-white shadow-sm'
+                      }`}>
+                        {selectedItem.tipo === 'Entrada' && <ArrowDownToLine size={13} />}
+                        {selectedItem.tipo === 'Merma' && <TriangleAlert size={13} />}
+                        {selectedItem.tipo}
+                      </span>
+                      <span className="text-xs sm:text-sm font-medium flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
+                        <Clock size={14} className="text-gray-400" />
+                        {selectedItem.fecha}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs sm:text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Operado por:</span>
+                      <span className="font-semibold px-2.5 py-0.5 rounded-lg bg-white/80 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-sm text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                        <User size={13} className="text-cyan-600" />
+                        {selectedItem.usuario || 'Sistema'}
+                      </span>
                     </div>
                   </div>
-                  <div>
-                    <span className="text-xs font-semibold uppercase text-gray-500">Motivo / Observaciones</span>
-                    <p className="mt-2 whitespace-pre-wrap rounded-lg border border-gray-200 p-3 text-sm text-gray-700">{selectedItem.motivo || 'Sin observaciones'}</p>
+
+                  {/* Tarjetas destacadas: Producto e Impacto Financiero */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Tarjeta Producto & Cantidad */}
+                    <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/50 p-4 shadow-sm">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                        Producto Afectado
+                      </span>
+                      <div className="mt-1.5 flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-lg bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 flex items-center justify-center flex-shrink-0">
+                          <Package size={18} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900 dark:text-gray-100 text-base leading-snug">
+                            {selectedItem.producto}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Cantidad: <strong className="text-gray-800 dark:text-gray-200 font-bold">{selectedItem.cantidad} unidades</strong>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Stock Flow */}
+                      <div className="mt-3.5 pt-3 border-t border-gray-100 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                        <span className="text-gray-500 dark:text-gray-400">Transición de Stock:</span>
+                        {selectedItem.stockAntes !== null && selectedItem.stockDespues !== null ? (
+                          <span className="font-mono font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                            <span>{selectedItem.stockAntes}</span>
+                            <ArrowRight size={12} className="text-cyan-600" />
+                            <span className="text-cyan-700 dark:text-cyan-400 font-bold">{selectedItem.stockDespues}</span>
+                            <span className={`text-[10px] ml-1 px-1 rounded ${
+                              selectedItem.stockDespues >= selectedItem.stockAntes ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                            }`}>
+                              {selectedItem.stockDespues >= selectedItem.stockAntes ? `+${selectedItem.stockDespues - selectedItem.stockAntes}` : `${selectedItem.stockDespues - selectedItem.stockAntes}`}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 italic">Actualizado al confirmar</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tarjeta Impacto Económico */}
+                    {selectedItem.tipo === 'Merma' ? (
+                      <div className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-gradient-to-br from-rose-50/80 to-amber-50/50 dark:from-rose-950/30 dark:to-amber-950/20 p-4 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center gap-1">
+                              <TriangleAlert size={13} />
+                              Pérdida Económica
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-rose-200/60 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 font-bold">
+                              Baja
+                            </span>
+                          </div>
+                          <p className="mt-2 text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
+                            Q{(Number(selectedItem.perdidaEconomica) > 0 ? Number(selectedItem.perdidaEconomica) : (costoUnitarioEfectivo * Number(selectedItem.cantidad || 0))).toFixed(2)}
+                          </p>
+                        </div>
+                        <p className="mt-2 text-xs text-rose-700/80 dark:text-rose-300/80 pt-2 border-t border-rose-200/60 dark:border-rose-900/40 font-medium">
+                          Costo unitario: Q{costoUnitarioEfectivo.toFixed(2)} × {selectedItem.cantidad} unidades
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-gradient-to-br from-emerald-50/80 to-cyan-50/50 dark:from-emerald-950/30 dark:to-cyan-950/20 p-4 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                              <ArrowDownToLine size={13} />
+                              Inversión / Costo Total
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-200/60 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-bold">
+                              Entrada
+                            </span>
+                          </div>
+                          <p className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                            Q{(costoUnitarioEfectivo * Number(selectedItem.cantidad || 0)).toFixed(2)}
+                          </p>
+                        </div>
+                        <p className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-300/80 pt-2 border-t border-emerald-200/60 dark:border-emerald-900/40 font-medium">
+                          Costo unitario: Q{costoUnitarioEfectivo.toFixed(2)} × {selectedItem.cantidad} unidades
+                        </p>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Proveedor y Justificación */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-gray-50/70 dark:bg-slate-800/40 p-4 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 dark:text-gray-400 font-medium flex items-center gap-1.5">
+                        <Building2 size={14} className="text-gray-400" />
+                        Proveedor Asociado:
+                      </span>
+                      <span className="font-semibold text-gray-800 dark:text-gray-200">
+                        {selectedItem.proveedor || 'Sin proveedor / No especificado'}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200/70 dark:border-slate-700/60">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-medium block mb-1.5 flex items-center gap-1.5">
+                        <Receipt size={14} className="text-gray-400" />
+                        Motivo / Factura / Observaciones:
+                      </span>
+                      <div className="rounded-lg bg-white dark:bg-slate-900 p-3 border border-gray-200 dark:border-slate-700 text-sm text-gray-800 dark:text-gray-200 font-medium whitespace-pre-wrap">
+                        {selectedItem.motivo || 'Sin observaciones registradas'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Documento Adjunto */}
                   {selectedItem.documentoUrl && (
                     <a
                       href={selectedItem.documentoUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex w-full items-center justify-center rounded-lg bg-cyan-50 py-3 font-medium text-cyan-700 hover:bg-cyan-100"
+                      className="flex items-center justify-center gap-2 w-full rounded-xl bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800/80 py-3 text-sm font-semibold text-cyan-800 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 transition-colors shadow-sm"
                     >
-                      {selectedItem.tipo === 'Merma' ? 'Ver evidencia adjunta' : 'Ver documento adjunto'}
+                      <FileText size={16} />
+                      {selectedItem.tipo === 'Merma' ? 'Ver Evidencia Fotográfica / Acta Adjunta' : 'Ver Comprobante / Factura Digital'}
                     </a>
                   )}
-                  <button type="button" onClick={handleCloseModal} className="w-full rounded-lg bg-gray-200 py-3 font-medium text-gray-700 hover:bg-gray-300">Cerrar</button>
+
+                  {/* Botón de cierre */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="w-full rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 py-3 font-semibold text-gray-700 dark:text-gray-200 transition-colors shadow-sm"
+                    >
+                      Cerrar Detalle
+                    </button>
+                  </div>
                 </div>
               )}
 
               {(modalType === 'provider-add' || modalType === 'provider-edit') && (
-                <form className="space-y-4" onSubmit={handleSubmitProveedor} noValidate>
-                  {proveedorError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{proveedorError}</div>}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[
-                      ['nombre', 'Nombre o razón social', 'Nombre del proveedor'],
-                      ['nit', 'NIT', '000000-0'],
-                      ['telefono', 'Teléfono', '5555-5555'],
-                      ['correo', 'Correo electrónico', 'correo@ejemplo.com'],
-                    ].map(([field, label, placeholder]) => (
-                      <div key={field}>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{label}{(field === 'codigo' || field === 'nombre') && ' *'}</label>
-                        <input
-                          type={field === 'correo' ? 'email' : 'text'}
-                          value={proveedorForm[field]}
-                          onChange={(event) => {
-                            const rawValue = event.target.value
-                            const value = field === 'nit'
-                              ? rawValue.replace(/[^a-zA-Z0-9]/g, '').slice(0, 13)
-                              : field === 'telefono'
-                                ? rawValue.replace(/\D/g, '').slice(0, 8)
-                                : rawValue
-                            setProveedorForm((previous) => ({ ...previous, [field]: value }))
-                            setProveedorError('')
-                          }}
-                          placeholder={placeholder}
-                          maxLength={field === 'nit' ? 13 : field === 'telefono' ? 8 : undefined}
-                          inputMode={field === 'telefono' ? 'numeric' : field === 'nit' ? 'text' : undefined}
-                          className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                          required={field === 'nombre'}
-                        />
-                      </div>
-                    ))}
+                <form className="space-y-5" onSubmit={handleSubmitProveedor} noValidate>
+                  {proveedorError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/90 dark:bg-red-950/40 dark:border-red-900/60 p-4 text-sm text-red-700 dark:text-red-300 flex items-center gap-3">
+                      <AlertTriangle size={18} className="flex-shrink-0 text-red-600" />
+                      <span>{proveedorError}</span>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <Building2 size={15} className="text-cyan-600" />
+                        Datos de la Empresa / Proveedor
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[
+                        ['nombre', 'Nombre o razón social', 'Nombre del proveedor', true],
+                        ['nit', 'NIT', '000000-0', false],
+                        ['telefono', 'Teléfono', '5555-5555', false],
+                        ['correo', 'Correo electrónico', 'correo@ejemplo.com', false],
+                      ].map(([field, label, placeholder, isRequired]) => (
+                        <div key={field}>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                            {label} {isRequired && <span className="text-red-500">*</span>}
+                          </label>
+                          <input
+                            type={field === 'correo' ? 'email' : 'text'}
+                            value={proveedorForm[field]}
+                            onChange={(event) => {
+                              const rawValue = event.target.value
+                              const value = field === 'nit'
+                                ? rawValue.replace(/[^a-zA-Z0-9]/g, '').slice(0, 13)
+                                : field === 'telefono'
+                                  ? rawValue.replace(/\D/g, '').slice(0, 8)
+                                  : rawValue
+                              setProveedorForm((previous) => ({ ...previous, [field]: value }))
+                              setProveedorError('')
+                            }}
+                            placeholder={placeholder}
+                            maxLength={field === 'nit' ? 13 : field === 'telefono' ? 8 : undefined}
+                            inputMode={field === 'telefono' ? 'numeric' : field === 'nit' ? 'text' : undefined}
+                            className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-900 dark:text-gray-100"
+                            required={isRequired}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex space-x-3 pt-4">
-                    <button type="button" onClick={handleCloseModal} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-medium">Cancelar</button>
-                    <button type="submit" disabled={isSavingProveedor} className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg font-medium disabled:opacity-50">
-                      {isSavingProveedor ? 'Guardando...' : 'Guardar Proveedor'}
+
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-3 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingProveedor}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                    >
+                      {isSavingProveedor ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          <span>Guardando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          <span>Guardar Proveedor</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
               )}
 
               {(modalType === 'add' || modalType === 'edit' || modalType === 'view') && (
-                <form className="space-y-4" onSubmit={handleSubmitProducto} noValidate>
+                <form className="space-y-5" onSubmit={handleSubmitProducto} noValidate>
                   {errorProducto && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      {errorProducto}
-                    </div>
-                  )}
-                  
-                  {/* Mostrar código generado automáticamente */}
-                  {productoForm.codigo && (
-                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                      <p className="text-xs text-blue-600 font-semibold mb-1">CÓDIGO ASIGNADO</p>
-                      <p className="text-xl font-bold text-blue-700 font-mono">{productoForm.codigo}</p>
+                    <div className="rounded-xl border border-red-200 bg-red-50/90 dark:bg-red-950/40 dark:border-red-900/60 p-4 text-sm text-red-700 dark:text-red-300 flex items-center gap-3">
+                      <AlertTriangle size={18} className="flex-shrink-0 text-red-600" />
+                      <span>{errorProducto}</span>
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Categoría</label>
-                    <select
-                      value={productoForm.categoria}
-                      onChange={(e) => handleProductoFormChange('categoria', e.target.value)}
-                      disabled={modalType === 'view'}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      required
-                    >
-                      <option value="">Seleccionar categoría...</option>
-                      {categoriasInventario.map((categoria) => (
-                        <option key={categoria.codigo} value={categoria.nombre}>
-                          {categoria.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Tarjeta 1: Clasificación y Nombre */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <Package size={15} className="text-cyan-600" />
+                        Identificación del Producto / Insumo
+                      </span>
+                      {productoForm.codigo && (
+                        <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
+                          Código: {productoForm.codigo}
+                        </span>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre del Producto</label>
-                    <input
-                      type="text"
-                      value={productoForm.nombre}
-                      onChange={(e) => handleProductoFormChange('nombre', e.target.value)}
-                      readOnly={modalType === 'view'}
-                      placeholder="Bolsa Hielo Cubo 5lb"
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      required
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Categoría <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={productoForm.categoria}
+                          onChange={(e) => handleProductoFormChange('categoria', e.target.value)}
+                          disabled={modalType === 'view'}
+                          className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-medium"
+                          required
+                        >
+                          <option value="">Seleccionar categoría...</option>
+                          {categoriasInventario.map((categoria) => (
+                            <option key={categoria.codigo} value={categoria.nombre}>
+                              {categoria.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Stock Mínimo</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={productoForm.minimo}
-                      onChange={(e) => handleProductoFormChange('minimo', e.target.value)}
-                      readOnly={modalType === 'view'}
-                      placeholder="0"
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      min="0"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">Opcional. Si lo dejas vacío se guardará en 0.</p>
-                  </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Stock Mínimo de Alerta
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={productoForm.minimo}
+                          onChange={(e) => handleProductoFormChange('minimo', e.target.value)}
+                          readOnly={modalType === 'view'}
+                          placeholder="0"
+                          maxLength={9}
+                          className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-medium"
+                        />
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Cantidad por paquete</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Nombre del Producto o Insumo <span className="text-red-500">*</span>
+                      </label>
                       <input
-                        type="number"
-                        step="0.01"
-                        value={productoForm.cantidadCompra}
-                        onChange={(e) => handleProductoFormChange('cantidadCompra', e.target.value)}
+                        type="text"
+                        value={productoForm.nombre}
+                        onChange={(e) => handleProductoFormChange('nombre', e.target.value)}
                         readOnly={modalType === 'view'}
-                        placeholder="50"
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                        min="0"
+                        placeholder="Ej: Bolsa Hielo Cubo 5lb, Vaso 18oz"
+                        maxLength={100}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-medium"
+                        required
                       />
-                      <p className="mt-1 text-xs text-gray-500">Ejemplo: 50 vasos por paquete.</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Precio por paquete (Q)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={productoForm.precioPaquete}
-                        onChange={(e) => handleProductoFormChange('precioPaquete', e.target.value)}
-                        readOnly={modalType === 'view'}
-                        placeholder="30.00"
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                        min="0"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">Ejemplo: Q30.00 por el paquete completo.</p>
+                      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        Permite letras, números, espacios y signos comunes (ej. Bolsa 5lb, Vaso 18oz).
+                      </p>
                     </div>
                   </div>
 
-                  <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4">
-                    <label className="block text-sm font-semibold text-cyan-800 mb-2">Costo unitario calculado</label>
-                    <div className="text-2xl font-bold text-cyan-700">
-                      Q{calcularCostoUnitario().toFixed(2)}
+                  {/* Tarjeta 2: Empaque y Costos */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 p-4 shadow-sm space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700/60 pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <Receipt size={15} className="text-cyan-600" />
+                        Parámetros de Compra y Empaque
+                      </span>
                     </div>
-                    <p className="mt-1 text-xs text-cyan-700">Este valor se guardará como costo unitario para inventario, recetas y ventas.</p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Cantidad por paquete
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={productoForm.cantidadCompra}
+                          onChange={(e) => handleProductoFormChange('cantidadCompra', e.target.value)}
+                          readOnly={modalType === 'view'}
+                          placeholder="50"
+                          maxLength={9}
+                          className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-semibold"
+                        />
+                        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Ejemplo: 50 unidades por paquete.</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                          Precio por paquete (Q)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">
+                            Q
+                          </span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={productoForm.precioPaquete}
+                            onChange={(e) => handleProductoFormChange('precioPaquete', e.target.value)}
+                            readOnly={modalType === 'view'}
+                            placeholder="30.00"
+                            maxLength={9}
+                            className="w-full pl-8 pr-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-semibold"
+                          />
+                        </div>
+                        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Ejemplo: Q30.00 por el fardo o paquete completo.</p>
+                      </div>
+                    </div>
+
+                    {/* Tarjeta de Costo Unitario Calculado */}
+                    <div className="rounded-xl border border-cyan-200 dark:border-cyan-800/80 bg-gradient-to-br from-cyan-50/80 via-blue-50/40 to-slate-50/60 dark:from-cyan-950/40 dark:via-blue-950/20 dark:to-slate-900/40 p-4 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300 block">
+                          Costo Unitario Calculado
+                        </span>
+                        <p className="text-xs text-cyan-700/80 dark:text-cyan-400/80 mt-0.5">
+                          Base para costeo de recetas y movimientos
+                        </p>
+                      </div>
+                      <div className="text-3xl font-black text-cyan-800 dark:text-cyan-200 font-mono">
+                        Q{calcularCostoUnitario().toFixed(2)}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex space-x-3 pt-4">
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-3 border-t border-gray-100 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                     >
-                      Cancelar
+                      {modalType === 'view' ? 'Cerrar' : 'Cancelar'}
                     </button>
-                    {modalType === 'view' ? (
-                      <button
-                        type="button"
-                        onClick={handleCloseModal}
-                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium"
-                      >
-                        Cerrar
-                      </button>
-                    ) : (
+                    {modalType !== 'view' && (
                       <button
                         type="submit"
                         disabled={isSavingProducto}
-                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium disabled:opacity-50"
+                        className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
                       >
-                        {isSavingProducto ? 'Guardando...' : modalType === 'add' ? 'Crear Artículo' : 'Guardar Cambios'}
+                        {isSavingProducto ? (
+                          <>
+                            <RefreshCw size={16} className="animate-spin" />
+                            <span>Guardando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle size={16} />
+                            <span>{modalType === 'add' ? 'Crear Artículo' : 'Guardar Cambios'}</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
@@ -1567,47 +1936,530 @@ function Inventarios() {
               )}
 
               {modalType === 'entrada' && (
-                <form className="space-y-5" onSubmit={(event) => handleSubmitEntrada(event, true)} noValidate>
-                  {errorProducto && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorProducto}</div>}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div><span className="block text-xs font-semibold text-gray-500">Número</span><span className="font-bold text-cyan-700">Automático</span><p className="text-[11px] text-gray-400">Se asigna al guardar</p></div>
-                    <div><label className="block text-xs font-semibold text-gray-500">Fecha</label><input type="date" value={entradaForm.fecha} onChange={(e) => setEntradaForm({ ...entradaForm, fecha: e.target.value })} className="w-full px-2 py-2 border-2 border-gray-200 rounded-lg" required /></div>
-                    <div><span className="block text-xs font-semibold text-gray-500">Tipo</span><span className="font-semibold text-gray-700">Compra</span></div>
-                    <div><span className="block text-xs font-semibold text-gray-500">Responsable</span><span className="font-semibold text-gray-700">Usuario actual</span></div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Proveedor *</label><select value={entradaForm.proveedorId} onChange={(e) => setEntradaForm({ ...entradaForm, proveedorId: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" required><option value="">Seleccionar proveedor...</option>{proveedores.filter((p) => p.activo).map((p) => <option key={p.id} value={p.id}>{p.nombre} · NIT: {p.nit || 'Sin NIT'}</option>)}</select></div>
-                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Número de factura *</label><input value={entradaForm.numeroFactura} onChange={(e) => setEntradaForm({ ...entradaForm, numeroFactura: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" required /></div>
-                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Fecha de factura</label><input type="date" value={entradaForm.fechaFactura} onChange={(e) => setEntradaForm({ ...entradaForm, fechaFactura: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" /></div>
-                  </div>
-                  <div className="border border-gray-200 rounded-xl overflow-x-auto">
-                    <table className="min-w-[650px] w-full text-sm"><thead className="bg-gray-50"><tr>{['Producto / unidad', 'Cantidad', 'Costo unitario', 'Total', ''].map((label) => <th key={label} className="px-3 py-2 text-left font-semibold text-gray-600">{label}</th>)}</tr></thead><tbody>
-                      {entradaForm.detalles.map((detalle, index) => {
-                        const totalLinea = Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)
-                        return <tr key={`entrada-detalle-${index}`} className="border-t"><td className="px-2 py-2"><select value={detalle.productoId} onChange={(e) => handleEntradaDetailChange(index, 'productoId', e.target.value)} className="w-full px-2 py-2 border rounded-lg" required><option value="">Seleccionar...</option>{productosVigentes.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select><span className="text-xs text-gray-400">{detalle.unidad}</span></td><td className="px-2 py-2"><input type="number" min="0.01" step="0.01" value={detalle.cantidad} onChange={(e) => handleEntradaDetailChange(index, 'cantidad', e.target.value)} className="w-24 px-2 py-2 border rounded-lg" required /></td><td className="px-2 py-2"><input type="number" min="0" step="0.01" value={detalle.costoUnitario} onChange={(e) => handleEntradaDetailChange(index, 'costoUnitario', e.target.value)} className="w-28 px-2 py-2 border rounded-lg" required /></td><td className="px-2 py-2 font-semibold">Q{totalLinea.toFixed(2)}</td><td><button type="button" onClick={() => setEntradaForm((previous) => ({ ...previous, detalles: previous.detalles.filter((_, detailIndex) => detailIndex !== index) }))} disabled={entradaForm.detalles.length === 1} className="text-red-500 disabled:opacity-30" aria-label="Eliminar fila"><Trash2 size={17} /></button></td></tr>
-                      })}</tbody></table>
-                    <button type="button" onClick={() => setEntradaForm((previous) => ({ ...previous, detalles: [...previous.detalles, { productoId: '', unidad: 'unidad', cantidad: '', costoUnitario: '' }] }))} className="m-3 text-sm font-semibold text-cyan-700">+ Agregar producto</button>
-                    <div className="flex justify-end gap-8 border-t bg-gray-50 px-4 py-3 text-sm">
-                      <span>Subtotal: <strong>Q{entradaForm.detalles.reduce((sum, detalle) => sum + (Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)), 0).toFixed(2)}</strong></span>
-                      <span className="text-base">Total: <strong className="text-cyan-700">Q{entradaForm.detalles.reduce((sum, detalle) => sum + (Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)), 0).toFixed(2)}</strong></span>
+                <form className="space-y-6" onSubmit={(event) => handleSubmitEntrada(event, true)} noValidate>
+                  {errorProducto && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/90 dark:bg-red-950/40 dark:border-red-900/60 p-4 text-sm text-red-700 dark:text-red-300 flex items-center gap-3">
+                      <AlertTriangle size={18} className="flex-shrink-0 text-red-600" />
+                      <span>{errorProducto}</span>
+                    </div>
+                  )}
+
+                  {/* Resumen del Encabezado */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl border border-cyan-100 dark:border-cyan-900/50 bg-gradient-to-r from-cyan-50/60 via-blue-50/40 to-slate-50/60 dark:from-cyan-950/20 dark:via-blue-950/20 dark:to-slate-900/40">
+                    <div>
+                      <span className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Número Correlativo
+                      </span>
+                      <span className="font-mono font-bold text-cyan-800 dark:text-cyan-300 text-sm mt-0.5 inline-block bg-white/80 dark:bg-slate-800 px-2.5 py-0.5 rounded border border-cyan-200 dark:border-cyan-800/60">
+                        Automático (ENT-XXXXX)
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Fecha Operación *
+                      </label>
+                      <input
+                        type="date"
+                        value={entradaForm.fecha}
+                        onChange={(e) => setEntradaForm({ ...entradaForm, fecha: e.target.value })}
+                        className="w-full mt-0.5 px-2.5 py-1 text-xs sm:text-sm font-medium border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Tipo Operación
+                      </span>
+                      <span className="font-semibold text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm mt-0.5 inline-flex items-center gap-1 bg-emerald-100/70 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        <ArrowDownToLine size={13} />
+                        Compra Directa
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Responsable
+                      </span>
+                      <span
+                        className="font-semibold text-cyan-900 dark:text-cyan-200 bg-white/80 dark:bg-slate-800 px-2.5 py-0.5 rounded-lg border border-cyan-200 dark:border-cyan-800 text-xs sm:text-sm mt-0.5 inline-flex items-center gap-1.5 truncate max-w-full"
+                        title={entradaForm.responsable || 'Usuario actual'}
+                      >
+                        <User size={13} className="text-cyan-600 flex-shrink-0" />
+                        <span className="truncate">{entradaForm.responsable || getCurrentUser()?.nombre || getCurrentUser()?.username || 'Usuario actual'}</span>
+                      </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-sm font-semibold text-gray-700 mb-2">Observaciones</label><textarea rows="3" value={entradaForm.observaciones} onChange={(e) => setEntradaForm({ ...entradaForm, observaciones: e.target.value })} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg" /></div><div><label className="block text-sm font-semibold text-gray-700 mb-2">Documento adjunto</label><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setEntradaForm({ ...entradaForm, documento: e.target.files?.[0] || null })} className="w-full text-sm" /><p className="text-xs text-gray-500 mt-1">Se almacena de forma segura en Supabase Storage.</p></div></div>
-                  <div className="flex justify-end gap-3 border-t pt-4"><button type="button" onClick={handleCloseModal} className="px-5 py-2 rounded-lg bg-gray-200 text-gray-700">Cancelar</button><button type="button" onClick={(event) => handleSubmitEntrada(event, false)} disabled={isSavingMovimiento} className="px-5 py-2 rounded-lg bg-gray-500 text-white disabled:opacity-50">Guardar borrador</button><button type="submit" disabled={isSavingMovimiento} className="px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white disabled:opacity-50">{isSavingMovimiento ? 'Guardando...' : 'Confirmar entrada'}</button></div>
+
+                  {/* Datos del Documento / Factura */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Proveedor <span className="text-[11px] font-normal text-gray-400">(Opcional)</span>
+                      </label>
+                      <select
+                        value={entradaForm.proveedorId}
+                        onChange={(e) => setEntradaForm({ ...entradaForm, proveedorId: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
+                      >
+                        <option value="">Sin proveedor / No especificado</option>
+                        {proveedores.filter((p) => p.activo).map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} · NIT: {p.nit || 'Sin NIT'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Número de Factura *
+                      </label>
+                      <div className="flex items-center">
+                        <span className="inline-flex items-center px-3.5 py-2.5 rounded-l-xl border-2 border-r-0 border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-bold text-sm select-none">
+                          Fac-
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={entradaForm.numeroFacturaOnlyDigits || ''}
+                          onKeyDown={(e) => {
+                            if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && !/[0-9]/.test(e.key)) {
+                              e.preventDefault()
+                            }
+                          }}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, '').slice(0, 15)
+                            setEntradaForm({
+                              ...entradaForm,
+                              numeroFacturaOnlyDigits: digits,
+                              numeroFactura: digits ? `Fac-${digits}` : '',
+                            })
+                          }}
+                          placeholder="12345"
+                          className="w-full px-3.5 py-2.5 border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono text-gray-900 dark:text-gray-100 text-sm font-semibold"
+                          required
+                        />
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        Solo números. Se registrará como: <strong className="text-cyan-700 dark:text-cyan-400 font-mono">{entradaForm.numeroFactura || 'Fac-...'}</strong>
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Fecha de Factura
+                      </label>
+                      <input
+                        type="date"
+                        value={entradaForm.fechaFactura}
+                        onChange={(e) => setEntradaForm({ ...entradaForm, fechaFactura: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tabla de Artículos a Ingresar */}
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50/90 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <Package size={15} className="text-cyan-600" />
+                        Detalle de Artículos / Insumos
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                        {entradaForm.detalles.length} {entradaForm.detalles.length === 1 ? 'artículo' : 'artículos'}
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[650px] w-full text-sm">
+                        <thead className="bg-gray-100/60 dark:bg-slate-800/60 text-gray-600 dark:text-gray-400 text-[11px] font-bold uppercase tracking-wider border-b border-gray-200 dark:border-slate-700">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left">Producto / Insumo</th>
+                            <th className="px-4 py-2.5 text-left w-32">Cantidad</th>
+                            <th className="px-4 py-2.5 text-left w-36">Costo Unit. (Q)</th>
+                            <th className="px-4 py-2.5 text-right w-32">Subtotal (Q)</th>
+                            <th className="px-3 py-2.5 text-center w-12"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-700/60">
+                          {entradaForm.detalles.map((detalle, index) => {
+                            const totalLinea = Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)
+                            return (
+                              <tr key={`entrada-detalle-${index}`} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="px-4 py-2.5">
+                                  <select
+                                    value={detalle.productoId}
+                                    onChange={(e) => handleEntradaDetailChange(index, 'productoId', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-medium"
+                                    required
+                                  >
+                                    <option value="">Seleccionar producto...</option>
+                                    {productosVigentes.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.nombre} (Stock actual: {p.stock})
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 block">
+                                    Unidad: {detalle.unidad || 'unidad'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    placeholder="0"
+                                    value={detalle.cantidad}
+                                    onChange={(e) => handleEntradaDetailChange(index, 'cantidad', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 font-semibold text-gray-800 dark:text-gray-200"
+                                    required
+                                  />
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <div className="relative">
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">
+                                      Q
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="0.00"
+                                      value={detalle.costoUnitario}
+                                      onChange={(e) => handleEntradaDetailChange(index, 'costoUnitario', e.target.value)}
+                                      className="w-full pl-6 pr-3 py-2 text-sm border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 font-semibold text-gray-800 dark:text-gray-200"
+                                      required
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-right font-bold text-gray-900 dark:text-gray-100 font-mono">
+                                  Q{totalLinea.toFixed(2)}
+                                </td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEntradaForm((previous) => ({
+                                        ...previous,
+                                        detalles: previous.detalles.filter((_, detailIndex) => detailIndex !== index),
+                                      }))
+                                    }
+                                    disabled={entradaForm.detalles.length === 1}
+                                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                                    title="Eliminar fila"
+                                    aria-label="Eliminar fila"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="p-3 bg-gray-50/70 dark:bg-slate-800/40 border-t border-gray-200 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEntradaForm((previous) => ({
+                            ...previous,
+                            detalles: [
+                              ...previous.detalles,
+                              { productoId: '', unidad: 'unidad', cantidad: '', costoUnitario: '' },
+                            ],
+                          }))
+                        }
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors"
+                      >
+                        <Plus size={15} />
+                        Agregar otro producto
+                      </button>
+
+                      <div className="flex items-center gap-6 text-sm">
+                        <span className="text-gray-500 dark:text-gray-400">
+                          Subtotal: <strong className="text-gray-700 dark:text-gray-300 font-bold">Q{entradaForm.detalles.reduce((sum, detalle) => sum + (Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)), 0).toFixed(2)}</strong>
+                        </span>
+                        <div className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-sm flex items-center gap-2">
+                          <span className="text-xs uppercase tracking-wider font-semibold">Total Entrada:</span>
+                          <span className="text-base font-black font-mono">
+                            Q{entradaForm.detalles.reduce((sum, detalle) => sum + (Number(detalle.cantidad || 0) * Number(detalle.costoUnitario || 0)), 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Observaciones y Documento Digital */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Observaciones / Justificación
+                      </label>
+                      <textarea
+                        rows="3"
+                        placeholder="Ingresa detalles sobre la entrega, condiciones o nota de remisión..."
+                        value={entradaForm.observaciones}
+                        onChange={(e) => setEntradaForm({ ...entradaForm, observaciones: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Comprobante Digital / Factura Adjunta
+                      </label>
+                      <div className="border-2 border-dashed border-gray-200 dark:border-slate-700 hover:border-cyan-400 dark:hover:border-cyan-500 rounded-xl p-3.5 bg-gray-50/50 dark:bg-slate-800/40 text-center transition-colors">
+                        <Upload size={20} className="mx-auto text-gray-400 dark:text-gray-500 mb-1.5" />
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={(e) => setEntradaForm({ ...entradaForm, documento: e.target.files?.[0] || null })}
+                          className="w-full text-xs text-gray-600 dark:text-gray-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-50 file:text-cyan-700 dark:file:bg-cyan-950/60 dark:file:text-cyan-300 hover:file:bg-cyan-100"
+                        />
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                          Admite PDF, JPG o PNG hasta 5 MB.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción */}
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => handleSubmitEntrada(event, false)}
+                      disabled={isSavingMovimiento}
+                      className="px-5 py-2.5 rounded-xl bg-slate-600 hover:bg-slate-700 text-white font-semibold text-sm transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      Guardar Borrador
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingMovimiento}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                    >
+                      {isSavingMovimiento ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          <span>Guardando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          <span>Confirmar Entrada</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </form>
               )}
 
-              {(modalType === 'salida' || modalType === 'merma') && (
+              {modalType === 'merma' && (
+                <form className="space-y-5" onSubmit={handleSubmitMovimiento} noValidate>
+                  {errorProducto && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/90 dark:bg-red-950/40 dark:border-red-900/60 p-4 text-sm text-red-700 dark:text-red-300 flex items-center gap-3">
+                      <AlertTriangle size={18} className="flex-shrink-0 text-red-600" />
+                      <span>{errorProducto}</span>
+                    </div>
+                  )}
+
+                  {/* Banner de Advertencia de Merma */}
+                  <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 flex items-start gap-3">
+                    <TriangleAlert size={20} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-bold">Baja Definitiva por Merma</h4>
+                      <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                        Esta acción descontará las unidades de inventario de forma inmediata y registrará el impacto en la pérdida económica del período.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Clasificación y Fecha */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Motivo de la Merma *
+                      </label>
+                      <select
+                        value={mermaForm.motivoTipo}
+                        onChange={(event) => setMermaForm((previous) => ({ ...previous, motivoTipo: event.target.value }))}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 text-gray-800 dark:text-gray-200 font-medium"
+                        required
+                      >
+                        <option value="">Seleccionar motivo de baja...</option>
+                        {motivosMerma.map((motivo) => (
+                          <option key={motivo.id} value={motivo.id}>
+                            {motivo.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Fecha de la Merma *
+                      </label>
+                      <input
+                        type="date"
+                        value={mermaForm.fecha}
+                        onChange={(event) => setMermaForm((previous) => ({ ...previous, fecha: event.target.value }))}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 text-gray-800 dark:text-gray-200"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Producto y Cantidad */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Producto Afectado *
+                      </label>
+                      <select
+                        value={movimientoForm.productoId}
+                        onChange={(e) => handleMovimientoFormChange('productoId', e.target.value)}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 text-gray-800 dark:text-gray-200 font-medium"
+                        required
+                      >
+                        <option value="">Seleccionar producto...</option>
+                        {productosVigentes.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} (Stock: {p.stock})
+                          </option>
+                        ))}
+                      </select>
+                      {selectedMovimientoProducto && (
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                          Existencia actual: <strong className="font-bold text-gray-800 dark:text-gray-200">{selectedMovimientoProducto.stock} unidades</strong>
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Cantidad a Dar de Baja *
+                      </label>
+                      <input
+                        type="number"
+                        value={movimientoForm.cantidad}
+                        onChange={(e) => handleMovimientoFormChange('cantidad', e.target.value)}
+                        placeholder="0"
+                        min="0.01"
+                        step="0.01"
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 text-gray-900 dark:text-gray-100 font-bold"
+                        required
+                      />
+                      {selectedMovimientoProducto && Number(movimientoForm.cantidad || 0) > Number(selectedMovimientoProducto.stock || 0) && (
+                        <p className="mt-1 text-xs text-red-600 font-medium">
+                          La cantidad supera el stock disponible ({selectedMovimientoProducto.stock}).
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de Impacto Financiero en Tiempo Real */}
+                  <div className="rounded-xl border-2 border-amber-300 dark:border-amber-800/80 bg-gradient-to-br from-amber-50 via-orange-50/60 to-rose-50/50 dark:from-amber-950/40 dark:via-orange-950/20 dark:to-rose-950/30 p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                        <TriangleAlert size={15} />
+                        Impacto Financiero Estimado
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-bold">
+                        Pérdida Económica
+                      </span>
+                    </div>
+
+                    <div className="mt-2.5 flex items-baseline justify-between">
+                      <p className="text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
+                        Q{perdidaEconomicaMerma.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-300/80 font-medium">
+                        Costo unit.: Q{costoUnitarioMerma.toFixed(2)} × {Number.isNaN(cantidadMerma) ? 0 : cantidadMerma} un.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Justificación y Evidencia */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Descripción / Justificación de la Merma *
+                      </label>
+                      <textarea
+                        value={movimientoForm.motivo}
+                        onChange={(e) => handleMovimientoFormChange('motivo', e.target.value)}
+                        rows="3"
+                        placeholder="Ej: Falla eléctrica en congelador 2 provocó descongelamiento total..."
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 text-gray-800 dark:text-gray-200 resize-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                        Evidencia Fotográfica / Acta de Baja <span className="text-[11px] font-normal text-gray-400">(Opcional)</span>
+                      </label>
+                      <div className="border-2 border-dashed border-gray-200 dark:border-slate-700 hover:border-amber-400 rounded-xl p-3.5 bg-gray-50/50 dark:bg-slate-800/40 text-center transition-colors">
+                        <Upload size={20} className="mx-auto text-gray-400 dark:text-gray-500 mb-1.5" />
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={(event) => setMermaForm((previous) => ({ ...previous, evidencia: event.target.files?.[0] || null }))}
+                          className="w-full text-xs text-gray-600 dark:text-gray-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-800 dark:file:bg-amber-950/60 dark:file:text-amber-300 hover:file:bg-amber-200"
+                        />
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                          Admite PDF, JPG o PNG hasta 5 MB.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción */}
+                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingMovimiento}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 inline-flex items-center gap-2"
+                    >
+                      {isSavingMovimiento ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          <span>Procesando Baja...</span>
+                        </>
+                      ) : (
+                        <>
+                          <TriangleAlert size={16} />
+                          <span>Confirmar Merma</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {modalType === 'salida' && (
                 <form className="space-y-4" onSubmit={handleSubmitMovimiento} noValidate>
                   {errorProducto && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                       {errorProducto}
                     </div>
                   )}
-                  {modalType === 'merma' && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Motivo *</label><select value={mermaForm.motivoTipo} onChange={(event) => setMermaForm((previous) => ({ ...previous, motivoTipo: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required><option value="">Seleccionar motivo...</option>{motivosMerma.map((motivo) => <option key={motivo.id} value={motivo.id}>{motivo.nombre}</option>)}</select></div>
-                    <div><label className="block text-sm font-semibold text-gray-700 mb-2">Fecha de la merma *</label><input type="date" value={mermaForm.fecha} onChange={(event) => setMermaForm((previous) => ({ ...previous, fecha: event.target.value }))} className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg" required /></div>
-                  </div>}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Producto</label>
                     <select
@@ -1622,44 +2474,23 @@ function Inventarios() {
                       ))}
                     </select>
                   </div>
-                  {modalType === 'entrada' && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Proveedor</label>
-                      <select
-                        value={movimientoForm.proveedorId}
-                        onChange={(e) => handleMovimientoFormChange('proveedorId', e.target.value)}
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                        required
-                      >
-                        <option value="">Seleccionar proveedor...</option>
-                        {proveedores.filter((proveedor) => proveedor.activo).map((proveedor) => (
-                          <option key={proveedor.id} value={proveedor.id}>{proveedor.codigo} - {proveedor.nombre}</option>
-                        ))}
-                      </select>
-                      {proveedores.filter((proveedor) => proveedor.activo).length === 0 && (
-                        <p className="mt-1 text-xs text-amber-600">Registra un proveedor antes de crear una Entrada.</p>
-                      )}
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Cantidad</label>
-                      <input
-                        type="number"
-                        value={movimientoForm.cantidad}
-                        onChange={(e) => handleMovimientoFormChange('cantidad', e.target.value)}
-                        placeholder="0"
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                        min="0.01"
-                        step="0.01"
-                        required
-                      />
-                      {(modalType === 'salida' || modalType === 'merma') && selectedMovimientoProducto && (
-                        <p className="mt-1 text-xs text-gray-500">
-                          Stock disponible: <span className="font-semibold text-gray-700">{selectedMovimientoProducto.stock}</span>
-                        </p>
-                      )}
-                    </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Cantidad</label>
+                    <input
+                      type="number"
+                      value={movimientoForm.cantidad}
+                      onChange={(e) => handleMovimientoFormChange('cantidad', e.target.value)}
+                      placeholder="0"
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                      min="0.01"
+                      step="0.01"
+                      required
+                    />
+                    {selectedMovimientoProducto && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Stock disponible: <span className="font-semibold text-gray-700">{selectedMovimientoProducto.stock}</span>
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Motivo / Observaciones</label>
@@ -1667,23 +2498,10 @@ function Inventarios() {
                       value={movimientoForm.motivo}
                       onChange={(e) => handleMovimientoFormChange('motivo', e.target.value)}
                       rows="3"
-                      placeholder={modalType === 'merma' ? 'Ej: Derretido por falla eléctrica' : 'Descripción del movimiento...'}
+                      placeholder="Descripción de la salida..."
                       className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
                     ></textarea>
                   </div>
-                  {modalType === 'merma' && (
-                    <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
-                      <p className="text-sm font-semibold text-orange-800 mb-2 flex items-center gap-2">
-                        <TriangleAlert size={16} aria-hidden="true" />
-                        Pérdida Económica
-                      </p>
-                      <p className="text-2xl font-bold text-orange-600">Q{perdidaEconomicaMerma.toFixed(2)}</p>
-                      <p className="text-xs text-orange-700 mt-1">
-                        Costo unitario: Q{costoUnitarioMerma.toFixed(2)} x Cantidad: {Number.isNaN(cantidadMerma) ? 0 : cantidadMerma}
-                      </p>
-                    </div>
-                  )}
-                  {modalType === 'merma' && <div><label className="block text-sm font-semibold text-gray-700 mb-2">Evidencia opcional</label><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setMermaForm((previous) => ({ ...previous, evidencia: event.target.files?.[0] || null }))} className="w-full text-sm" /><p className="text-xs text-gray-500 mt-1">PDF, JPG o PNG de hasta 5 MB.</p></div>}
                   <div className="flex space-x-3 pt-4">
                     <button
                       type="button"
@@ -1695,9 +2513,9 @@ function Inventarios() {
                     <button
                       type="submit"
                       disabled={isSavingMovimiento}
-                      className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md font-medium disabled:opacity-50"
+                      className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md font-medium disabled:opacity-50"
                     >
-                      {isSavingMovimiento ? 'Registrando...' : 'Registrar Movimiento'}
+                      {isSavingMovimiento ? 'Registrando...' : 'Registrar Salida'}
                     </button>
                   </div>
                 </form>

@@ -22,9 +22,7 @@ import {
 } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
 import { getCurrentUser, logout } from '../services/authService'
-import { listVentasPos } from '../services/posService'
-import { listProductosInventario } from '../services/inventarioService'
-import { getRecetasCount } from '../services/recetasService'
+import { getDashboardMetrics } from '../services/posService'
 import { subscribeToDataChanges } from '../services/realtimeSync'
 import { useTheme } from '../theme/useTheme'
 import IceTransitionScreen from './IceTransitionScreen'
@@ -109,52 +107,21 @@ function Dashboard() {
   useEffect(() => {
     let isMounted = true
 
-    const fetchStats = async ({ updateRecetas = false } = {}) => {
+    const fetchStats = async () => {
       try {
-        const promises = [
-          listVentasPos().catch(() => []),
-          listProductosInventario().catch(() => []),
-        ]
-        if (updateRecetas) {
-          promises.push(getRecetasCount().catch(() => 0))
-        }
-
-        const [ventas, inventario, recetasTotalCount] = await Promise.all(promises)
-
+        const stats = await getDashboardMetrics()
         if (!isMounted) return
-
-        const hoy = new Date()
-        const ventasHoy = (ventas || []).filter((v) => {
-          if (!v.createdAt) return false
-          const f = new Date(v.createdAt)
-          return (
-            !Number.isNaN(f.getTime()) &&
-            f.getFullYear() === hoy.getFullYear() &&
-            f.getMonth() === hoy.getMonth() &&
-            f.getDate() === hoy.getDate()
-          )
-        })
-
-        const totalVentasHoy = ventasHoy.reduce((s, v) => s + (Number(v.total) || 0), 0)
-        const stockTotal = (inventario || []).reduce((s, p) => s + (Number(p.stock) || 0), 0)
-
-        setDashboardStats((prev) => ({
-          ventasHoy: totalVentasHoy,
-          transaccionesHoy: ventasHoy.length,
-          stockTotal,
-          recetasTotal: updateRecetas ? (recetasTotalCount ?? prev.recetasTotal) : prev.recetasTotal,
-        }))
+        setDashboardStats(stats)
       } catch (err) {
         console.debug('Error al cargar métricas de dashboard:', err)
       }
     }
 
-    void fetchStats({ updateRecetas: true })
+    void fetchStats()
 
-    const unsubscribe = subscribeToDataChanges(({ type }) => {
-      const shouldUpdateRecetas = type === 'recetas' || type === 'all'
-      void fetchStats({ updateRecetas: shouldUpdateRecetas })
-    }, { intervalSeconds: 15, types: ['all', 'ventas', 'recetas', 'inventario', 'produccion'] })
+    const unsubscribe = subscribeToDataChanges(() => {
+      void fetchStats()
+    }, { intervalSeconds: 45, types: ['all', 'ventas', 'recetas', 'inventario', 'produccion'] })
 
     return () => {
       isMounted = false

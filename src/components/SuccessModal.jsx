@@ -30,10 +30,10 @@ export default function SuccessModal({
       aria-modal="true"
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-emerald-100 p-7 text-center relative transform transition-all scale-100 dark:bg-[#18181f] dark:border-[#2b2b38]"
+        className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-emerald-100 dark:border-emerald-950 p-7 text-center relative transform transition-all scale-100 dark:bg-slate-900 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-5 w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center dark:bg-emerald-950/40 dark:text-emerald-400">
+        <div className="mx-auto mb-5 w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-xs">
           <CheckCircle2 size={36} strokeWidth={2.2} aria-hidden="true" />
         </div>
         {subtitle && (
@@ -41,17 +41,17 @@ export default function SuccessModal({
             {subtitle}
           </p>
         )}
-        <h3 className="text-xl font-bold text-gray-800 dark:text-[#e4e4e7] mb-2">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
           {title}
         </h3>
-        <p className="text-sm text-gray-600 dark:text-[#a1a1aa] mb-6 whitespace-pre-line leading-relaxed">
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line leading-relaxed">
           {message}
         </p>
         <button
           type="button"
           onClick={onClose}
           autoFocus
-          className="w-full rounded-lg bg-gray-900 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 dark:bg-cyan-600 dark:hover:bg-cyan-700 dark:focus:ring-offset-[#18181f]"
+          className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 py-3 text-sm font-bold text-white shadow-md hover:shadow-emerald-500/25 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
         >
           {buttonText}
         </button>
