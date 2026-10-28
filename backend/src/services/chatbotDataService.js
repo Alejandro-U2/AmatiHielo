@@ -151,6 +151,7 @@ function getNextRequestedDate(message, today) {
   const weekdayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
   const normalized = normalizeText(message)
   if (/\bhoy\b/.test(normalized)) return new Date(today)
+  if (/\bayer\b/.test(normalized)) return addDays(today, -1)
   if (/\bmanana\b/.test(normalized)) return addDays(today, 1)
   const isoDateMatch = normalized.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/)
   const regionalDateMatch = normalized.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](20\d{2}))?\b/)

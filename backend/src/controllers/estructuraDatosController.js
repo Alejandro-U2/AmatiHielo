@@ -39,15 +39,20 @@ function normalizeCampo(campo = {}) {
 }
 
 async function countRecordsForTable(tableName) {
-  const { count, error } = await supabaseAdmin
-    .from(tableName)
-    .select('id', { count: 'exact', head: true })
+  try {
+    const { count, error } = await supabaseAdmin
+      .from(tableName)
+      .select('*', { count: 'exact', head: true })
 
-  if (error) {
-    throw error
+    if (error) {
+      console.warn(`[EstructuraDatos] Error contando registros de ${tableName}:`, error.message)
+      return 0
+    }
+
+    return count || 0
+  } catch {
+    return 0
   }
-
-  return count || 0
 }
 
 function normalizeTabla(tabla = {}, registros = 0) {

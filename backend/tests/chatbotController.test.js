@@ -54,6 +54,22 @@ describe('sendChatbotMessage', () => {
     expect(response.body.message).toContain('Hielo 10 lb: 32 bolsas')
   })
 
+  it('consulta inventario cuando el usuario pregunta cómo está', async () => {
+    mocks.buildChatbotContext.mockResolvedValue({
+      intencion: 'stock',
+      datos: { productos: [
+        { nombre: 'Hielo 5 lb', stock: 8, minimo: 12, minimoConfigurado: true, unidad: 'bolsas', bajoMinimo: true },
+      ] },
+    })
+
+    const response = createResponse()
+    await sendChatbotMessage(request('¿Cómo está el inventario?'), response)
+
+    expect(response.body.type).toBe('inventory')
+    expect(response.body.message).toContain('Hielo 5 lb: 8 bolsas — BAJO MÍNIMO')
+    expect(mocks.buildChatbotContext).toHaveBeenCalledWith('¿Cómo está el inventario?')
+  })
+
   it('no inventa una existencia para un producto que no está registrado', async () => {
     mocks.buildChatbotContext.mockResolvedValue({ intencion: 'stock', datos: { productos: [] } })
 

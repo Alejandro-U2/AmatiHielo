@@ -126,6 +126,15 @@ function Inventarios() {
     telefono: '',
     correo: '',
   })
+  const [showQuickProveedorModal, setShowQuickProveedorModal] = useState(false)
+  const [quickProveedorForm, setQuickProveedorForm] = useState({
+    nombre: '',
+    nit: '',
+    telefono: '',
+    correo: '',
+  })
+  const [isSavingQuickProveedor, setIsSavingQuickProveedor] = useState(false)
+  const [quickProveedorError, setQuickProveedorError] = useState('')
   const [productoForm, setProductoForm] = useState({
     codigo: '',
     categoria: '',
@@ -833,6 +842,51 @@ const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
         setIsSavingProveedor(false)
       }
     }
+
+  const handleSaveQuickProveedor = async (e) => {
+    if (e) e.preventDefault()
+    setQuickProveedorError('')
+
+    const nombre = quickProveedorForm.nombre.trim()
+    if (!nombre) {
+      setQuickProveedorError('El nombre del proveedor es obligatorio.')
+      return
+    }
+
+    if (quickProveedorForm.nit && !/^[a-zA-Z0-9]{1,13}$/.test(quickProveedorForm.nit.trim())) {
+      setQuickProveedorError('El NIT debe contener únicamente letras y números, con un máximo de 13 caracteres.')
+      return
+    }
+
+    if (quickProveedorForm.telefono && !/^\d{1,8}$/.test(quickProveedorForm.telefono.trim())) {
+      setQuickProveedorError('El teléfono debe contener únicamente números, con un máximo de 8 dígitos.')
+      return
+    }
+
+    setIsSavingQuickProveedor(true)
+    try {
+      const created = await createProveedorInventario({
+        nombre,
+        nit: quickProveedorForm.nit.trim() || undefined,
+        telefono: quickProveedorForm.telefono.trim() || undefined,
+        correo: quickProveedorForm.correo.trim() || undefined,
+      })
+
+      await loadProveedores()
+
+      if (created?.id) {
+        setEntradaForm((prev) => ({ ...prev, proveedorId: String(created.id) }))
+      }
+
+      setQuickProveedorForm({ nombre: '', nit: '', telefono: '', correo: '' })
+      setShowQuickProveedorModal(false)
+      toast.success(`Proveedor "${created?.nombre || nombre}" registrado y seleccionado correctamente.`)
+    } catch (error) {
+      setQuickProveedorError(error.message || 'No fue posible registrar el proveedor.')
+    } finally {
+      setIsSavingQuickProveedor(false)
+    }
+  }
 
   const handleDeleteProveedor = async (item) => {
       if (!item?.id) return
@@ -1992,20 +2046,49 @@ const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
                   {/* Datos del Documento / Factura */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
-                        Proveedor <span className="text-[11px] font-normal text-gray-400">(Opcional)</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                          Proveedor <span className="text-[11px] font-normal text-gray-400">(Opcional)</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickProveedorError('')
+                            setQuickProveedorForm({ nombre: '', nit: '', telefono: '', correo: '' })
+                            setShowQuickProveedorModal(true)
+                          }}
+                          className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 flex items-center gap-1 transition-colors"
+                        >
+                          <Plus size={13} className="stroke-[2.5]" />
+                          <span>Crear nuevo</span>
+                        </button>
+                      </div>
                       <select
                         value={entradaForm.proveedorId}
-                        onChange={(e) => setEntradaForm({ ...entradaForm, proveedorId: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
+                        onChange={(e) => {
+                          if (e.target.value === '__NEW__') {
+                            setQuickProveedorError('')
+                            setQuickProveedorForm({ nombre: '', nit: '', telefono: '', correo: '' })
+                            setShowQuickProveedorModal(true)
+                          } else {
+                            setEntradaForm({ ...entradaForm, proveedorId: e.target.value })
+                          }
+                        }}
+                        className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-medium"
                       >
                         <option value="">Sin proveedor / No especificado</option>
-                        {proveedores.filter((p) => p.activo).map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nombre} · NIT: {p.nit || 'Sin NIT'}
-                          </option>
-                        ))}
+                        <option value="__NEW__" className="font-bold text-cyan-600 dark:text-cyan-400">
+                          ➕ + Crear nuevo proveedor...
+                        </option>
+                        {proveedores.filter((p) => p.activo).length > 0 && (
+                          <optgroup label="Proveedores Registrados">
+                            {proveedores.filter((p) => p.activo).map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.nombre} · NIT: {p.nit || 'Sin NIT'}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </div>
 
@@ -2566,6 +2649,136 @@ const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
                 {isDeleting ? 'Eliminando...' : 'Eliminar producto'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Rápido de Nuevo Proveedor (Invocable directamente desde el Form de Entrada) */}
+      {showQuickProveedorModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[70] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header Sticky */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 bg-gradient-to-r from-cyan-600 via-cyan-500 to-blue-600 flex items-center justify-between text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base leading-tight">Nuevo Proveedor Rápido</h3>
+                  <p className="text-xs text-cyan-100 mt-0.5">Se creará y seleccionará automáticamente en esta entrada</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickProveedorModal(false)
+                  setQuickProveedorError('')
+                }}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleSaveQuickProveedor} className="p-6 space-y-4">
+              {quickProveedorError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/40 dark:border-red-900/60 p-3 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+                  <AlertTriangle size={15} className="flex-shrink-0 text-red-600" />
+                  <span>{quickProveedorError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                  Nombre del Proveedor *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={quickProveedorForm.nombre}
+                  onChange={(e) => setQuickProveedorForm({ ...quickProveedorForm, nombre: e.target.value })}
+                  placeholder="Ej: Distribuidora de Plásticos S.A."
+                  className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                    NIT (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={13}
+                    value={quickProveedorForm.nit}
+                    onChange={(e) => setQuickProveedorForm({ ...quickProveedorForm, nit: e.target.value.replace(/[^a-zA-Z0-9]/g, '') })}
+                    placeholder="Ej: 12345678K"
+                    className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                    Teléfono (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={quickProveedorForm.telefono}
+                    onChange={(e) => setQuickProveedorForm({ ...quickProveedorForm, telefono: e.target.value.replace(/\D/g, '') })}
+                    placeholder="Ej: 55551234"
+                    className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                  Correo Electrónico (Opcional)
+                </label>
+                <input
+                  type="email"
+                  value={quickProveedorForm.correo}
+                  onChange={(e) => setQuickProveedorForm({ ...quickProveedorForm, correo: e.target.value })}
+                  placeholder="ventas@proveedor.com"
+                  className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
+                />
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowQuickProveedorModal(false)
+                    setQuickProveedorError('')
+                  }}
+                  disabled={isSavingQuickProveedor}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 text-xs sm:text-sm font-semibold hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingQuickProveedor}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-xs sm:text-sm shadow-md hover:shadow-cyan-500/25 transition-all inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingQuickProveedor ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Guardar y Seleccionar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

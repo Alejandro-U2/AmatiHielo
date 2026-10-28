@@ -46,7 +46,6 @@ import Pagination from '../../components/Pagination'
 import SortableHeader from '../../components/SortableHeader'
 import ReporteModal from '../../components/ReporteModal'
 import { generarReporteModulo } from '../../utils/moduloExport'
-import { sanitizeSoloLetras, capitalizeWords } from '../../utils/validation'
 import { useTableSort, sortRows } from '../../hooks/useTableSort'
 import ModuleHeader from '../ModuleHeader'
 import SuccessModal from '../SuccessModal'
@@ -1355,9 +1354,9 @@ function ProduccionRecetas() {
                     <input
                       type="text"
                       value={recetaForm.nombre}
-                      onChange={(e) => setRecetaForm({...recetaForm, nombre: sanitizeSoloLetras(e.target.value)})}
-                      onBlur={(e) => setRecetaForm({...recetaForm, nombre: capitalizeWords(e.target.value)})}
-                      placeholder="Ej: Smoothie de Fresa - Grande"
+                      onChange={(e) => setRecetaForm({...recetaForm, nombre: e.target.value})}
+                      onBlur={(e) => setRecetaForm({...recetaForm, nombre: e.target.value.trim()})}
+                      placeholder="Ej: Bolsa de Hielo 5lb"
                       className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
                     />
                   </div>
@@ -2069,9 +2068,9 @@ function ProduccionRecetas() {
                     <input
                       type="text"
                       value={recetaForm.nombre}
-                      onChange={(e) => setRecetaForm({...recetaForm, nombre: sanitizeSoloLetras(e.target.value)})}
-                      onBlur={(e) => setRecetaForm({...recetaForm, nombre: capitalizeWords(e.target.value)})}
-                      placeholder="Ej: Smoothie de Fresa - Grande"
+                      onChange={(e) => setRecetaForm({...recetaForm, nombre: e.target.value})}
+                      onBlur={(e) => setRecetaForm({...recetaForm, nombre: e.target.value.trim()})}
+                      placeholder="Ej: Bolsa de Hielo 5lb"
                       className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
                     />
                   </div>
@@ -2346,9 +2345,9 @@ function ProduccionRecetas() {
                   <input
                     type="text"
                     value={ingredienteForm.nombre}
-                    onChange={(e) => setIngredienteForm({...ingredienteForm, nombre: sanitizeSoloLetras(e.target.value)})}
-                    onBlur={(e) => setIngredienteForm({...ingredienteForm, nombre: capitalizeWords(e.target.value)})}
-                    placeholder="Ej: Harina, Azúcar, Leche..."
+                    onChange={(e) => setIngredienteForm({...ingredienteForm, nombre: e.target.value})}
+                    onBlur={(e) => setIngredienteForm({...ingredienteForm, nombre: e.target.value.trim()})}
+                    placeholder="Ej: Bolsa plástica 5lb, Agua..."
                     className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
                   />
                 </div>
@@ -2583,9 +2582,9 @@ function ProduccionRecetas() {
                   <input
                     type="text"
                     value={ingredienteForm.nombre}
-                    onChange={(e) => setIngredienteForm({...ingredienteForm, nombre: sanitizeSoloLetras(e.target.value)})}
-                    onBlur={(e) => setIngredienteForm({...ingredienteForm, nombre: capitalizeWords(e.target.value)})}
-                    placeholder="Ej: Harina, Azúcar..."
+                    onChange={(e) => setIngredienteForm({...ingredienteForm, nombre: e.target.value})}
+                    onBlur={(e) => setIngredienteForm({...ingredienteForm, nombre: e.target.value.trim()})}
+                    placeholder="Ej: Bolsa plástica 5lb, Agua..."
                     className="w-full px-3.5 py-2.5 text-sm border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-gray-800 dark:text-gray-200"
                   />
                 </div>
