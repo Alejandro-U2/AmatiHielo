@@ -528,6 +528,21 @@ function ProduccionRecetas() {
       })
     }
 
+    if (type === 'editReceta' && item) {
+      setRecetaForm({
+        codigo: item.codigo,
+        nombre: item.nombre,
+        categoria: item.categoria,
+        presentacion: item.presentacion,
+        imagenUrl: item.imagenUrl || '',
+        costoElectricidad: item.costoElectricidad !== undefined && item.costoElectricidad !== null ? item.costoElectricidad.toString() : '0',
+        costoManoObra: item.costoManoObra !== undefined && item.costoManoObra !== null ? item.costoManoObra.toString() : '0',
+        costoAgua: item.costoAgua !== undefined && item.costoAgua !== null ? item.costoAgua.toString() : '0',
+        costoLocal: item.costoLocal !== undefined && item.costoLocal !== null ? item.costoLocal.toString() : '0',
+        precioVenta: item.precioVenta !== undefined && item.precioVenta !== null ? item.precioVenta.toString() : '0',
+      })
+    }
+
     if (type === 'verBOM' && item) {
       syncBomCostos(item)
     }
@@ -719,20 +734,26 @@ function ProduccionRecetas() {
     try {
       setLoading(true)
       setErrorMsg('')
-      await updateReceta(selectedReceta.id, {
+      const recetaActualizada = await updateReceta(selectedReceta.id, {
+        codigo: selectedReceta.codigo,
+        nombre: selectedReceta.nombre,
+        categoria: selectedReceta.categoria,
         costoElectricidad: bomCostosForm.costoElectricidad,
         costoManoObra: bomCostosForm.costoManoObra,
         costoAgua: bomCostosForm.costoAgua,
         costoLocal: bomCostosForm.costoLocal,
         precioVenta: bomCostosForm.precioVenta,
       })
-      const recetasActualizadas = await getRecetas({ includeImages: true })
-      const nuevaReceta = recetasActualizadas.find((r) => r.id === selectedReceta.id)
-      setRecetas(recetasActualizadas)
-      if (nuevaReceta) {
-        setSelectedReceta(nuevaReceta)
-        syncBomCostos(nuevaReceta)
+      const recetaCompleta = {
+        ...selectedReceta,
+        ...recetaActualizada,
+        ingredientes: (recetaActualizada.ingredientes && recetaActualizada.ingredientes.length > 0)
+          ? recetaActualizada.ingredientes
+          : (selectedReceta.ingredientes || []),
       }
+      setRecetas(prev => prev.map(r => r.id === selectedReceta.id ? recetaCompleta : r))
+      setSelectedReceta(recetaCompleta)
+      syncBomCostos(recetaCompleta)
       setSuccessMsg('✅ Costos de producción guardados correctamente.')
     } catch (err) {
       setErrorMsg(err.message || 'Error al guardar los costos de producción.')
@@ -770,10 +791,11 @@ function ProduccionRecetas() {
       setLoading(true)
       setErrorMsg('')
       const recetaActualizada = await updateReceta(selectedReceta.id, {
+        codigo: selectedReceta.codigo,
         nombre: recetaForm.nombre,
         categoria: recetaForm.categoria,
         presentacion: recetaForm.presentacion,
-        imagenUrl: recetaForm.imagenUrl || null,
+        imagenUrl: recetaForm.imagenUrl !== undefined ? (recetaForm.imagenUrl || null) : null,
         costoElectricidad: recetaForm.costoElectricidad ? Number(recetaForm.costoElectricidad) : 0,
         costoManoObra: recetaForm.costoManoObra ? Number(recetaForm.costoManoObra) : 0,
         costoAgua: recetaForm.costoAgua ? Number(recetaForm.costoAgua) : 0,
@@ -781,11 +803,22 @@ function ProduccionRecetas() {
         precioVenta: recetaForm.precioVenta ? Number(recetaForm.precioVenta) : 0,
       })
 
-      setRecetas(recetas.map(r => r.id === selectedReceta.id ? recetaActualizada : r))
+      const recetaCompleta = {
+        ...selectedReceta,
+        ...recetaActualizada,
+        ingredientes: (recetaActualizada.ingredientes && recetaActualizada.ingredientes.length > 0)
+          ? recetaActualizada.ingredientes
+          : (selectedReceta.ingredientes || []),
+      }
+
+      setRecetas(prev => prev.map(r => r.id === selectedReceta.id ? recetaCompleta : r))
+      setSelectedReceta(recetaCompleta)
+      syncBomCostos(recetaCompleta)
+
       setSuccessMsg('✅ Receta actualizada correctamente')
       setTimeout(() => {
         closeModal()
-      }, 2000)
+      }, 1000)
     } catch (error) {
       setErrorMsg(error.message || 'Error al actualizar la receta.')
     } finally {

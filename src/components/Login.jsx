@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Moon, Sun } from 'lucide-react'
+import { KeyRound, Moon, Snowflake, Sparkles, Sun } from 'lucide-react'
 import logoAmati from '../assets/logo-amati.jpg'
 import { forgotPassword, isAuthenticated, login } from '../services/authService'
 import { useTheme } from '../theme/useTheme'
@@ -160,13 +160,24 @@ function Login() {
 
       <style>{`
         @keyframes snowTwinkle {
-          0%, 100% { opacity: var(--base-opacity); }
-          50% { opacity: var(--peak-opacity); }
+          0%, 100% { opacity: var(--base-opacity); transform: rotate(var(--rot, 0deg)) scale(1); }
+          50% { opacity: var(--peak-opacity); transform: rotate(var(--rot, 0deg)) scale(1.06); }
         }
 
-        @keyframes snowmanBob {
-          0%, 100% { transform: translateY(0) rotate(var(--rot)); }
-          50% { transform: translateY(-8px) rotate(var(--rot)); }
+        @keyframes crystalBob {
+          0%, 100% { transform: translateY(0) rotate(var(--rot, 0deg)); }
+          50% { transform: translateY(-8px) rotate(var(--rot, 0deg)); }
+        }
+
+        @media (max-width: 768px) {
+          .login-bg-snowflake svg {
+            width: 70px !important;
+            height: 70px !important;
+          }
+          .login-bg-crystal svg {
+            width: 50px !important;
+            height: 50px !important;
+          }
         }
 
         @media (max-width: 480px) {
@@ -181,59 +192,69 @@ function Login() {
             width: 70px !important;
             height: 70px !important;
           }
+          .login-bg-snowflake svg {
+            width: 48px !important;
+            height: 48px !important;
+          }
+          .login-bg-crystal svg {
+            width: 36px !important;
+            height: 36px !important;
+          }
         }
       `}</style>
 
       {/* Google Fonts */}
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
 
-      {/* Snowflakes background */}
+      {/* Snowflakes background (Vector SVG) */}
       {[
-        { size: 200, top: '8%', left: '6%', rot: 12, opacity: 0.32 },
-        { size: 100, top: '18%', right: '8%', rot: -18, opacity: 0.25 },
-        { size: 100, bottom: '24%', left: '5%', rot: 26, opacity: 0.2 },
-        { size: 200, bottom: '10%', right: '10%', rot: -8, opacity: 0.3 },
-        { size: 100, top: '45%', left: '3%', rot: 30, opacity: 0.2 },
-        { size: 100, top: '6%', right: '22%', rot: -22, opacity: 0.24 },
-        { size: 100, bottom: '34%', right: '5%', rot: 8, opacity: 0.22 },
-        { size: 100, top: '62%', left: '12%', rot: -12, opacity: 0.18 },
+        { size: 180, top: '8%', left: '6%', rot: 12, opacity: 0.28 },
+        { size: 95, top: '18%', right: '8%', rot: -18, opacity: 0.22 },
+        { size: 95, bottom: '24%', left: '5%', rot: 26, opacity: 0.18 },
+        { size: 180, bottom: '10%', right: '10%', rot: -8, opacity: 0.25 },
+        { size: 90, top: '45%', left: '3%', rot: 30, opacity: 0.18 },
+        { size: 90, top: '6%', right: '22%', rot: -22, opacity: 0.2 },
+        { size: 95, bottom: '34%', right: '5%', rot: 8, opacity: 0.2 },
+        { size: 90, top: '62%', left: '12%', rot: -12, opacity: 0.16 },
       ].map((c, i) => (
-        <span key={i} style={{
+        <div key={`flake-${i}`} className="login-bg-snowflake" style={{
           position: 'absolute',
           top: c.top, left: c.left, right: c.right, bottom: c.bottom,
-          fontSize: c.size,
-          lineHeight: 1,
           color: 'rgb(170, 240, 255)',
           opacity: c.opacity,
           '--base-opacity': c.opacity,
-          '--peak-opacity': Math.min(c.opacity + 0.22, 0.72),
-          textShadow: '0 0 16px rgba(120,220,255,0.35)',
+          '--peak-opacity': Math.min(c.opacity + 0.22, 0.65),
+          '--rot': `${c.rot}deg`,
+          filter: 'drop-shadow(0 0 14px rgba(120,220,255,0.4))',
           transform: `rotate(${c.rot}deg)`,
           animation: `snowTwinkle ${4 + (i % 3)}s ease-in-out ${i * 0.35}s infinite`,
           pointerEvents: 'none',
           userSelect: 'none',
-        }}>❄</span>
+        }}>
+          <Snowflake size={c.size} strokeWidth={1.2} />
+        </div>
       ))}
 
-      {/* Snowmen background */}
+      {/* Cryogenic Sparkle Crystals background (Vector SVG) */}
       {[
-        { size: 150, top: '40%', left: '22%', rot: -6, opacity: 0.18 },
-        { size: 86, bottom: '14%', left: '46%', rot: 2, opacity: 0.2 },
-        { size: 150, top: '40%', right: '20%', rot: 7, opacity: 0.17 },
+        { size: 110, top: '40%', left: '20%', rot: -6, opacity: 0.18 },
+        { size: 75, bottom: '14%', left: '46%', rot: 2, opacity: 0.2 },
+        { size: 110, top: '38%', right: '18%', rot: 7, opacity: 0.17 },
       ].map((s, i) => (
-        <span key={`snowman-${i}`} style={{
+        <div key={`crystal-${i}`} className="login-bg-crystal" style={{
           position: 'absolute',
           top: s.top, left: s.left, right: s.right, bottom: s.bottom,
-          fontSize: s.size,
-          lineHeight: 1,
-          color: `rgba(200, 245, 255, ${s.opacity})`,
+          color: 'rgb(190, 245, 255)',
+          opacity: s.opacity,
           '--rot': `${s.rot}deg`,
-          textShadow: '0 0 16px rgba(120,220,255,0.28)',
+          filter: 'drop-shadow(0 0 16px rgba(120,220,255,0.35))',
           transform: `rotate(${s.rot}deg)`,
-          animation: `snowmanBob ${5 + i}s ease-in-out ${i * 0.4}s infinite`,
+          animation: `crystalBob ${5 + i}s ease-in-out ${i * 0.4}s infinite`,
           pointerEvents: 'none',
           userSelect: 'none',
-        }}>☃</span>
+        }}>
+          <Sparkles size={s.size} strokeWidth={1.3} />
+        </div>
       ))}
 
       {/* Card */}
@@ -527,8 +548,18 @@ function Login() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ marginBottom: '1.25rem' }}>
-              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 600, color: theme === 'dark' ? '#e4e4e7' : '#102a38', fontFamily: "'Outfit', sans-serif" }}>
-                🔑 Recuperar contraseña
+              <h2 style={{
+                margin: '0 0 6px',
+                fontSize: 22,
+                fontWeight: 600,
+                color: theme === 'dark' ? '#e4e4e7' : '#102a38',
+                fontFamily: "'Outfit', sans-serif",
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                <KeyRound size={22} style={{ color: '#38d1f0', flexShrink: 0 }} />
+                <span>Recuperar contraseña</span>
               </h2>
               <p style={{ margin: 0, fontSize: 13, color: theme === 'dark' ? '#a1a1aa' : '#5a7180', fontFamily: "'Outfit', sans-serif" }}>
                 Ingresa tu usuario o correo. Te enviaremos un enlace para restablecer tu contraseña.

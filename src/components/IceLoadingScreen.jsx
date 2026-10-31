@@ -35,9 +35,9 @@ export default function IceLoadingScreen({
     soundEnabledRef.current = soundEnabled
   }, [soundEnabled])
 
-  // Generación memoizada de partículas de nieve y destellos de hielo
+  // Generación memoizada de partículas de nieve y destellos de hielo (con selector de texto para evitar emojis en móviles)
   const particles = useMemo(() => {
-    const symbols = ['❄', '❅', '❆', '✦', '•', '✧', '❄']
+    const symbols = ['❄\uFE0E', '✦', '•', '✧', '❅\uFE0E', '✦', '✧']
     return Array.from({ length: 32 }, (_, i) => ({
       id: i,
       symbol: symbols[i % symbols.length],

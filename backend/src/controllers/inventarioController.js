@@ -626,17 +626,61 @@ export async function createMovimiento(req, res) {
   }
 }
 
+export async function getNextNumeroFactura() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('entrada_inventario')
+      .select('numero_factura')
+
+    if (error) {
+      console.warn('Error al consultar numero_factura de entrada_inventario:', error.message)
+      return 'FAC-000001'
+    }
+
+    let max = 0
+    for (const row of data || []) {
+      const val = String(row?.numero_factura || '').trim()
+      if (!val) continue
+      const matches = val.match(/\d+/g)
+      if (matches && matches.length > 0) {
+        const num = parseInt(matches[matches.length - 1], 10)
+        if (!Number.isNaN(num) && num > max) {
+          max = num
+        }
+      }
+    }
+    const next = max + 1
+    return `FAC-${String(next).padStart(6, '0')}`
+  } catch (err) {
+    console.error('Error calculando correlativo de factura:', err)
+    return 'FAC-000001'
+  }
+}
+
+export async function getSiguienteNumeroFactura(req, res) {
+  try {
+    const siguienteNumeroFactura = await getNextNumeroFactura()
+    return res.json({ siguienteNumeroFactura })
+  } catch (error) {
+    return buildErrorResponse(res, error, 'No fue posible obtener el siguiente número de factura.')
+  }
+}
+
 export async function createEntradaInventario(req, res) {
   const body = req.body || {}
   const detalles = Array.isArray(body.detalles) ? body.detalles : []
   const proveedorId = (body.proveedorId || body.proveedor_id) ? Number(body.proveedorId ?? body.proveedor_id) : null
   let numeroFactura = String(body.numeroFactura ?? body.numero_factura ?? '').trim()
-  if (numeroFactura) {
+
+  if (!numeroFactura || numeroFactura.toUpperCase() === 'AUTO') {
+    numeroFactura = await getNextNumeroFactura()
+  } else {
     const digitsOnly = numeroFactura.replace(/\D/g, '')
-    if (digitsOnly) {
-      numeroFactura = `Fac-${digitsOnly}`
+    if (digitsOnly && /^(fac[-\s]?)?\d+$/i.test(numeroFactura)) {
+      numeroFactura = `FAC-${digitsOnly.padStart(6, '0')}`
     }
   }
+
   if (!numeroFactura || detalles.length === 0) {
     return res.status(400).json({ message: 'El número de factura y al menos un producto son obligatorios.' })
   }

@@ -79,17 +79,18 @@ function normalizeReceta(row) {
   const costoLocal = Number(row.costo_local ?? row.costoLocal ?? 0)
   const costosProduccionCalc = costoElectricidad + costoManoObra + costoAgua + costoLocal
 
-  const subtotalMateriaPrima = Number(row.subtotal_materia_prima ?? row.subtotalMateriaPrima) || ingredientes.reduce((sum, ing) => sum + ing.costoTotal, 0)
-  const costosProduccion = Number(row.costos_produccion ?? row.costosProduccion) || costosProduccionCalc
-  const costoTotal = Number(row.costo_total ?? row.costoTotal) || (subtotalMateriaPrima + costosProduccion)
-  const precioVenta = Number(row.precio_sugerido ?? row.precioSugerido ?? 0)
+  const subtotalMateriaPrima = Number(row.subtotalMateriaPrima ?? row.subtotal_materia_prima ?? ingredientes.reduce((sum, ing) => sum + ing.costoTotal, 0))
+  const costosProduccion = Number(row.costosProduccion ?? row.costos_produccion ?? costosProduccionCalc)
+  const costoTotal = Number(row.costoTotal ?? row.costo_total ?? (subtotalMateriaPrima + costosProduccion))
+  const precioVenta = Number(row.precio_sugerido ?? row.precioSugerido ?? row.precio_venta ?? row.precioVenta ?? 0)
   const utilidad = precioVenta - costoTotal
   const margen = precioVenta > 0 ? (utilidad / precioVenta) * 100 : 0
 
   const cachedImg = typeof localStorage !== 'undefined' && row.codigo
     ? localStorage.getItem(`amati_receta_img_${row.codigo}`)
     : null
-  const imagenUrl = row.imagen_url || row.imagenUrl || cachedImg || null
+  const rawImg = row.imagen_url !== undefined ? row.imagen_url : row.imagenUrl
+  const imagenUrl = rawImg !== undefined ? rawImg : (cachedImg || null)
 
   return {
     id: row.id,
@@ -238,11 +239,11 @@ export async function updateReceta(id, input) {
   const receta = normalizeReceta(payload?.data || {})
   if (typeof localStorage !== 'undefined' && (receta.codigo || input.codigo)) {
     const code = receta.codigo || input.codigo
-    if (receta.imagenUrl && receta.imagenUrl.startsWith('http')) {
-      localStorage.setItem(`amati_receta_img_${code}`, receta.imagenUrl)
-    } else if (input.imagenUrl === '' || input.imagenUrl === null) {
+    if (input.imagenUrl === '' || input.imagenUrl === null) {
       localStorage.removeItem(`amati_receta_img_${code}`)
       receta.imagenUrl = null
+    } else if (receta.imagenUrl && typeof receta.imagenUrl === 'string' && receta.imagenUrl.startsWith('http')) {
+      localStorage.setItem(`amati_receta_img_${code}`, receta.imagenUrl)
     }
   }
   notifyDataChange('recetas')

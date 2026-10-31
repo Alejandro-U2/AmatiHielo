@@ -15,28 +15,57 @@ function parseOptionalNumber(value) {
   return Number.isNaN(parsed) ? Number.NaN : parsed
 }
 
-function normalizeRecetaPayload(body = {}) {
-  const payload = {
-    codigo: body.codigo?.trim(),
-    nombre: body.nombre?.trim(),
-    categoria: body.categoria?.trim() || 'Bebidas',
-    presentacion: body.presentacion?.trim() || null,
-    costo_electricidad: parseOptionalNumber(body.costoElectricidad ?? body.costo_electricidad) ?? 0,
-    costo_mano_obra: parseOptionalNumber(body.costoManoObra ?? body.costo_mano_obra) ?? 0,
-    costo_agua: parseOptionalNumber(body.costoAgua ?? body.costo_agua) ?? 0,
-    costo_local: parseOptionalNumber(body.costoLocal ?? body.costo_local) ?? 0,
+function normalizeRecetaPayload(body = {}, isUpdate = false) {
+  if (!isUpdate) {
+    const payload = {
+      codigo: body.codigo?.trim(),
+      nombre: body.nombre?.trim(),
+      categoria: body.categoria?.trim() || 'Bebidas',
+      presentacion: body.presentacion?.trim() || null,
+      costo_electricidad: parseOptionalNumber(body.costoElectricidad ?? body.costo_electricidad) ?? 0,
+      costo_mano_obra: parseOptionalNumber(body.costoManoObra ?? body.costo_mano_obra) ?? 0,
+      costo_agua: parseOptionalNumber(body.costoAgua ?? body.costo_agua) ?? 0,
+      costo_local: parseOptionalNumber(body.costoLocal ?? body.costo_local) ?? 0,
+    }
+
+    const precioVenta = parseOptionalNumber(body.precioVenta ?? body.precioSugerido ?? body.precio_sugerido)
+    if (precioVenta !== null) {
+      payload.precio_sugerido = precioVenta
+    }
+
+    if (body.imagenUrl !== undefined || body.imagen_url !== undefined) {
+      const rawImg = body.imagenUrl !== undefined ? body.imagenUrl : body.imagen_url
+      payload.imagen_url = typeof rawImg === 'string' ? rawImg.trim() || null : null
+    }
+
+    return payload
   }
 
+  const payload = {}
+  if (body.codigo !== undefined) payload.codigo = body.codigo?.trim()
+  if (body.nombre !== undefined) payload.nombre = body.nombre?.trim()
+  if (body.categoria !== undefined) payload.categoria = body.categoria?.trim()
+  if (body.presentacion !== undefined) payload.presentacion = body.presentacion?.trim() || null
+  if (body.costoElectricidad !== undefined || body.costo_electricidad !== undefined) {
+    payload.costo_electricidad = parseOptionalNumber(body.costoElectricidad ?? body.costo_electricidad) ?? 0
+  }
+  if (body.costoManoObra !== undefined || body.costo_mano_obra !== undefined) {
+    payload.costo_mano_obra = parseOptionalNumber(body.costoManoObra ?? body.costo_mano_obra) ?? 0
+  }
+  if (body.costoAgua !== undefined || body.costo_agua !== undefined) {
+    payload.costo_agua = parseOptionalNumber(body.costoAgua ?? body.costo_agua) ?? 0
+  }
+  if (body.costoLocal !== undefined || body.costo_local !== undefined) {
+    payload.costo_local = parseOptionalNumber(body.costoLocal ?? body.costo_local) ?? 0
+  }
   const precioVenta = parseOptionalNumber(body.precioVenta ?? body.precioSugerido ?? body.precio_sugerido)
-  if (precioVenta !== null) {
+  if (precioVenta !== null && !Number.isNaN(precioVenta)) {
     payload.precio_sugerido = precioVenta
   }
-
   if (body.imagenUrl !== undefined || body.imagen_url !== undefined) {
     const rawImg = body.imagenUrl !== undefined ? body.imagenUrl : body.imagen_url
     payload.imagen_url = typeof rawImg === 'string' ? rawImg.trim() || null : null
   }
-
   return payload
 }
 
@@ -379,15 +408,15 @@ export async function createReceta(req, res) {
 
 export async function updateReceta(req, res) {
   const { id } = req.params
-  const payload = normalizeRecetaPayload(req.body)
-
   if (!id) {
     return res.status(400).json({ message: 'El id de la receta es obligatorio.' })
   }
 
-  if (!payload.nombre || !payload.categoria) {
+  const payload = normalizeRecetaPayload(req.body, true)
+
+  if (payload.nombre !== undefined && !payload.nombre) {
     return res.status(400).json({
-      message: 'nombre y categoria son obligatorios.',
+      message: 'El nombre de la receta no puede estar vacío.',
     })
   }
 
@@ -401,20 +430,42 @@ export async function updateReceta(req, res) {
     if (updatePayload.imagen_url && updatePayload.imagen_url.startsWith('data:image/')) {
       updatePayload.imagen_url = await processRecetaImage(updatePayload.imagen_url, updatePayload.codigo || id)
     }
-    const { data, error } = await supabaseAdmin
+
+    const { error: updateError } = await supabaseAdmin
       .from('receta')
       .update(updatePayload)
       .eq('id', id)
-      .select(fields)
-      .single()
 
-    if (error || !data) {
-      return buildErrorResponse(res, error, 'No fue posible actualizar la receta.', 400)
+    if (updateError) {
+      return buildErrorResponse(res, updateError, 'No fue posible actualizar la receta.', 400)
     }
 
-    const costos = await recalcularCostosReceta(id)
+    // Recalcular costos de producción y totales en base de datos
+    await recalcularCostosReceta(id)
 
-    return res.json({ data: { ...data, ...costos } })
+    // Obtener la receta final con todos los campos y costos actualizados
+    const { data: recetaActualizada, error: fetchError } = await supabaseAdmin
+      .from('receta')
+      .select(fields)
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !recetaActualizada) {
+      return buildErrorResponse(res, fetchError, 'No fue posible obtener la receta actualizada.')
+    }
+
+    // Cargar ingredientes para que el frontend no los pierda al actualizar
+    const { data: ingredientes } = await supabaseAdmin
+      .from('ingrediente_receta')
+      .select('*')
+      .eq('receta_id', id)
+
+    return res.json({
+      data: {
+        ...recetaActualizada,
+        ingredientes: ingredientes || [],
+      },
+    })
   } catch (error) {
     return buildErrorResponse(res, error, 'No fue posible actualizar la receta.')
   }

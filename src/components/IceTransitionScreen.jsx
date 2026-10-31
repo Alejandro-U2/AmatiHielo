@@ -22,9 +22,9 @@ export default function IceTransitionScreen({
     onCompleteRef.current = onComplete
   }, [onComplete])
 
-  // Partículas sutiles de fondo
+  // Partículas sutiles de fondo (con selector de texto para evitar emojis en móviles)
   const flakes = useMemo(() => {
-    const symbols = ['❄', '✦', '•', '❅']
+    const symbols = ['❄\uFE0E', '✦', '•', '✧']
     return Array.from({ length: 16 }, (_, i) => ({
       id: i,
       symbol: symbols[i % symbols.length],

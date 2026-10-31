@@ -235,6 +235,11 @@ export async function uploadEntradaInventarioDocumento(file) {
   return payload?.data?.path || null
 }
 
+export async function getSiguienteNumeroFacturaEntrada() {
+  const payload = await request('/api/inventario/entrada/siguiente-factura')
+  return payload?.siguienteNumeroFactura || 'FAC-000001'
+}
+
 export async function createEntradaInventario(input) {
   const payload = await request('/api/inventario/entrada', {
     method: 'POST',

@@ -26,12 +26,14 @@ import {
   X,
   ClipboardList,
   ClipboardCheck,
+  Sparkles,
 } from 'lucide-react'
 import AuditoriaInventarioModal from './auditoria/AuditoriaInventarioModal'
 import {
   createProductoInventario,
   createMovimientoInventario,
   createEntradaInventario,
+  getSiguienteNumeroFacturaEntrada,
   uploadEntradaInventarioDocumento,
   deleteProductoInventario,
   listCategoriasInventario,
@@ -92,6 +94,22 @@ function Inventarios() {
   const [proveedorError, setProveedorError] = useState('')
   const [isSavingProducto, setIsSavingProducto] = useState(false)
   const [isSavingMovimiento, setIsSavingMovimiento] = useState(false)
+  const [loadingFacturaNumero, setLoadingFacturaNumero] = useState(false)
+
+  const fetchSiguienteFactura = async () => {
+    try {
+      setLoadingFacturaNumero(true)
+      const sig = await getSiguienteNumeroFacturaEntrada()
+      setEntradaForm((prev) => ({
+        ...prev,
+        numeroFactura: sig,
+      }))
+    } catch (err) {
+      console.error('Error al obtener siguiente número de factura:', err)
+    } finally {
+      setLoadingFacturaNumero(false)
+    }
+  }
   const [errorProducto, setErrorProducto] = useState('')
   const [errorCarga, setErrorCarga] = useState('')
   const [deleteItem, setDeleteItem] = useState(null)
@@ -330,13 +348,12 @@ function Inventarios() {
   const resetEntradaForm = (item = null) => {
     const currentUser = getCurrentUser()
     const nombreResponsable = currentUser?.nombre || currentUser?.username || 'Usuario actual'
-    const rawDigits = String(item?.numero_factura || item?.numeroFactura || '').replace(/\D/g, '')
+    const existingFactura = String(item?.numero_factura || item?.numeroFactura || '').trim()
 
     setEntradaForm({
       fecha: new Date().toISOString().slice(0, 10),
       proveedorId: '',
-      numeroFactura: rawDigits ? `Fac-${rawDigits}` : '',
-      numeroFacturaOnlyDigits: rawDigits,
+      numeroFactura: existingFactura || '',
       responsable: nombreResponsable,
       fechaFactura: '',
       observaciones: '',
@@ -566,6 +583,9 @@ function Inventarios() {
 
     if (type === 'entrada') {
       resetEntradaForm(item)
+      if (!item?.numero_factura && !item?.numeroFactura) {
+        fetchSiguienteFactura()
+      }
     }
 
     setShowModal(true)
@@ -713,14 +733,13 @@ const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
     setErrorProducto('')
     setIsSavingMovimiento(true)
     try {
-      const rawDigits = String(entradaForm.numeroFacturaOnlyDigits || entradaForm.numeroFactura || '').replace(/\D/g, '')
-      if (!rawDigits) {
-        throw new Error('El número de factura es obligatorio (ingresa solo números).')
+      let facturaFinal = String(entradaForm.numeroFactura || '').trim()
+      if (!facturaFinal) {
+        facturaFinal = await getSiguienteNumeroFacturaEntrada()
       }
       if (entradaForm.detalles.some((detalle) => !detalle.productoId || Number(detalle.cantidad) <= 0 || Number(detalle.costoUnitario) < 0)) {
         throw new Error('Completa producto, cantidad y costo de cada fila.')
       }
-      const formattedFactura = `Fac-${rawDigits}`
       const currentUser = getCurrentUser()
       const responsableFinal = entradaForm.responsable || currentUser?.nombre || currentUser?.username || 'Usuario actual'
 
@@ -728,7 +747,7 @@ const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
       await createEntradaInventario({
         fecha: entradaForm.fecha,
         proveedorId: entradaForm.proveedorId ? Number(entradaForm.proveedorId) : null,
-        numeroFactura: formattedFactura,
+        numeroFactura: facturaFinal,
         responsable: responsableFinal,
         fechaFactura: entradaForm.fechaFactura || null,
         observaciones: entradaForm.observaciones,
@@ -2093,37 +2112,40 @@ const limitDigits = (value, maxIntegerDigits = 6, maxDecimalDigits = 2) => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
-                        Número de Factura *
-                      </label>
-                      <div className="flex items-center">
-                        <span className="inline-flex items-center px-3.5 py-2.5 rounded-l-xl border-2 border-r-0 border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-bold text-sm select-none">
-                          Fac-
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                          Número de Factura *
+                        </label>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/60 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/60">
+                          <Sparkles className="w-3 h-3 text-cyan-500" /> Automático
                         </span>
+                      </div>
+                      <div className="relative flex items-center">
                         <input
                           type="text"
-                          inputMode="numeric"
-                          value={entradaForm.numeroFacturaOnlyDigits || ''}
-                          onKeyDown={(e) => {
-                            if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && !/[0-9]/.test(e.key)) {
-                              e.preventDefault()
-                            }
-                          }}
+                          value={entradaForm.numeroFactura || ''}
                           onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, '').slice(0, 15)
                             setEntradaForm({
                               ...entradaForm,
-                              numeroFacturaOnlyDigits: digits,
-                              numeroFactura: digits ? `Fac-${digits}` : '',
+                              numeroFactura: e.target.value,
                             })
                           }}
-                          placeholder="12345"
-                          className="w-full px-3.5 py-2.5 border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono text-gray-900 dark:text-gray-100 text-sm font-semibold"
+                          placeholder={loadingFacturaNumero ? 'Generando correlativo...' : 'FAC-000001'}
+                          className="w-full pl-3.5 pr-10 py-2.5 border-2 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono text-gray-900 dark:text-gray-100 text-sm font-semibold tracking-wide"
                           required
                         />
+                        <button
+                          type="button"
+                          onClick={fetchSiguienteFactura}
+                          disabled={loadingFacturaNumero}
+                          title="Recalcular siguiente correlativo automático"
+                          className="absolute right-2 p-1.5 rounded-lg text-gray-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${loadingFacturaNumero ? 'animate-spin text-cyan-500' : ''}`} />
+                        </button>
                       </div>
                       <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                        Solo números. Se registrará como: <strong className="text-cyan-700 dark:text-cyan-400 font-mono">{entradaForm.numeroFactura || 'Fac-...'}</strong>
+                        Correlativo generado automáticamente. Puedes editarlo si tu proveedor emitió un número propio.
                       </p>
                     </div>
 

@@ -17,7 +17,10 @@ const STORAGE_BUCKET = 'system-backups'
 // Lista de tablas críticas de AMATI HIELO a incluir en el volcado
 export const TABLAS_SISTEMA = [
   'usuarios',
+  'usuario',
+  'perfil',
   'roles',
+  'rol',
   'permisos',
   'rol_permisos',
   'producto',
@@ -28,14 +31,22 @@ export const TABLAS_SISTEMA = [
   'catalogo_motivos_merma',
   'receta',
   'receta_ingrediente',
+  'ingrediente_receta',
   'produccion',
   'produccion_detalle',
+  'plan_produccion',
   'ventas',
+  'venta',
   'detalle_ventas',
+  'detalle_venta',
   'clientes',
+  'cliente',
   'cajas',
+  'caja',
   'sesiones_caja',
+  'sesion_caja',
   'arqueos_caja',
+  'arqueo_caja',
   'configuracion_sistema',
   'empresa_config',
   'sucursales',
@@ -44,6 +55,7 @@ export const TABLAS_SISTEMA = [
   'prediccion_demanda_historial',
   'prediccion_configuracion',
   'notificaciones',
+  'tabla_estructura',
 ]
 
 // Asegurar existencia de directorio

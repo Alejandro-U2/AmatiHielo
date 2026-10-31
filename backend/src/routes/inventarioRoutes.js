@@ -4,6 +4,7 @@ import {
 	createMovimiento,
 	createEntradaInventario,
 	uploadEntradaInventarioDocumento,
+	getSiguienteNumeroFactura,
 	deleteProducto,
 	listCategorias,
 	listMovimientos,
@@ -41,6 +42,7 @@ router.get('/motivos-merma', listMotivosMerma)
 router.get('/movimiento', listMovimientos)
 router.get('/proveedor', listProveedores)
 router.post('/movimiento', createMovimiento)
+router.get('/entrada/siguiente-factura', getSiguienteNumeroFactura)
 router.post('/entrada', createEntradaInventario)
 router.post('/entrada/documento', uploadEntradaInventarioDocumento)
 router.post('/proveedor', requireAdmin, createProveedor)
