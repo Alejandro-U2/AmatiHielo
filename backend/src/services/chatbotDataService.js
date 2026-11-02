@@ -40,6 +40,13 @@ function resolveForecastRequest(message, availableDates) {
     }
   }
 
+  if (/\bhoy\b/.test(normalized)) {
+    return { date: availableDates[0] || null, matched: true }
+  }
+  if (/\bmanana\b/.test(normalized)) {
+    return { date: availableDates[1] || null, matched: true }
+  }
+
   const weekdayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
   const requestedWeekday = weekdayNames.find((name) => new RegExp(`\\b${name}\\b`).test(normalized))
   if (!requestedWeekday) return { date: null, matched: false }
